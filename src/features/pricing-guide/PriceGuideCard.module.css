@@ -1,0 +1,149 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px;
+  background: var(--color-surface);
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.customer {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.product {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  background: var(--color-bg);
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+}
+
+.priceGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.priceItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  background: var(--color-bg);
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+}
+
+.aiPrice {
+  border-color: var(--color-primary);
+  background: #eef2ff;
+}
+
+.priceLabel {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.priceValue {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.priceUnit {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.rangeSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rangeLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.rangeBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rangeMin,
+.rangeMax {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+.barTrack {
+  flex: 1;
+  height: 6px;
+  background: var(--color-border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.barFill {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #48bb78, #2D6AFF);
+  border-radius: 3px;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.diffLabel {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.diffBadge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 6px;
+}
+
+.easy {
+  background: #c6f6d5;
+  color: #276749;
+}
+
+.medium {
+  background: #fefcbf;
+  color: #744210;
+}
+
+.hard {
+  background: #fed7d7;
+  color: #742a2a;
+}
+
+@media (max-width: 480px) {
+  .priceGrid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,30 @@
+.grid {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.cols2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.cols3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.cols1 {
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 960px) {
+  .cols3 {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .cols2,
+  .cols3 {
+    grid-template-columns: 1fr;
+  }
+}

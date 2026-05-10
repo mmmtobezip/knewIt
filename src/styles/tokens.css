@@ -1,0 +1,85 @@
+:root {
+  /* Brand Colors */
+  --green: #03C75A;
+  --red: #F5403C;
+  --blue: #2D6AFF;
+  --orange: #FF6B1A;
+
+  /* Surface */
+  --bg: #F5F5F7;
+  --surface: #FFFFFF;
+  --surface-secondary: #FAFAFA;
+  --border: #E5E5EA;
+  --border-light: #F2F2F7;
+
+  /* Text */
+  --text-primary: #1C1C1E;
+  --text-secondary: #6E6E73;
+  --text-tertiary: #AEAEB2;
+
+  /* GNB */
+  --gnb-bg: #1C1C1E;
+  --gnb-height: 56px;
+  --context-bar-height: 40px;
+  --tab-bar-height: 44px;
+
+  /* Drawer */
+  --drawer-width: 380px;
+
+  /* Radius */
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-xs: 6px;
+
+  /* Shadow */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.10);
+
+  /* Alert level colors */
+  --alert-high-bg: rgba(245, 64, 60, 0.08);
+  --alert-high-text: #F5403C;
+  --alert-medium-bg: rgba(255, 107, 26, 0.08);
+  --alert-medium-text: #FF6B1A;
+  --alert-low-bg: rgba(3, 199, 90, 0.08);
+  --alert-low-text: #03C75A;
+
+  /* Typography */
+  --font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-base: 13px;
+  --font-size-md: 14px;
+  --font-size-lg: 15px;
+  --font-size-xl: 16px;
+  --font-size-2xl: 18px;
+  --font-size-3xl: 22px;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 20px;
+  --spacing-2xl: 24px;
+
+  /* Transition */
+  --transition-fast: 0.15s ease;
+  --transition-drawer: 0.2s ease;
+
+  /* Component aliases */
+  --color-surface: var(--surface);
+  --color-bg: var(--bg);
+  --color-border: var(--border);
+  --color-primary: var(--blue);
+  --color-primary-light: #eef2ff;
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-up: var(--red);
+  --color-down: #3182ce;
+  --color-error: var(--red);
+  --color-surface-hover: #f8faff;
+}
+
+/* Responsive breakpoints (used as reference in media queries) */
+/* Mobile: max-width 768px */
+/* Tablet: max-width 960px */

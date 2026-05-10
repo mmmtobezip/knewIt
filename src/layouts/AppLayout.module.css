@@ -1,0 +1,34 @@
+.layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding-top: var(--gnb-height);
+}
+
+.topBar {
+  position: sticky;
+  top: var(--gnb-height);
+  z-index: 100;
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  position: relative;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  transition: margin-right var(--transition-drawer);
+}
+
+.mainWithDrawer {
+  margin-right: var(--drawer-width);
+}
+
+@media (max-width: 768px) {
+  .mainWithDrawer {
+    margin-right: 0;
+  }
+}

@@ -1,0 +1,102 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1.5px solid transparent;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tone {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.description {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  flex: 1;
+}
+
+.meta {
+  display: flex;
+  gap: 16px;
+}
+
+.metaItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.metaLabel {
+  font-size: 10px;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.metaValue {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.tone_CONSERVATIVE {
+  background: #f0fff4;
+  border-color: #9ae6b4;
+}
+
+.tone_CONSERVATIVE .tone {
+  background: #c6f6d5;
+  color: #276749;
+}
+
+.tone_BALANCED {
+  background: #ebf8ff;
+  border-color: #90cdf4;
+}
+
+.tone_BALANCED .tone {
+  background: #bee3f8;
+  color: #2c5282;
+}
+
+.tone_AGGRESSIVE {
+  background: #fff5f5;
+  border-color: #feb2b2;
+}
+
+.tone_AGGRESSIVE .tone {
+  background: #fed7d7;
+  color: #742a2a;
+}

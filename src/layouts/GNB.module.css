@@ -1,0 +1,124 @@
+.gnb {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--gnb-height);
+  background: var(--gnb-bg);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  z-index: 1000;
+  gap: 8px;
+}
+
+.logo {
+  color: white;
+  font-weight: 700;
+  font-size: var(--font-size-xl);
+  letter-spacing: -0.5px;
+  margin-right: 12px;
+  white-space: nowrap;
+}
+
+.logoAccent {
+  color: var(--blue);
+}
+
+.nav {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+}
+
+.navBtn {
+  padding: 6px 14px;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  white-space: nowrap;
+  position: relative;
+}
+
+.navBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+}
+
+.navBtnActive {
+  background: rgba(45, 106, 255, 0.2);
+  color: var(--blue);
+  font-weight: 600;
+}
+
+.navBtnActive:hover {
+  background: rgba(45, 106, 255, 0.28);
+  color: var(--blue);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--red);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: 8px;
+}
+
+.userAvatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .gnb {
+    padding: 0 12px;
+    gap: 4px;
+  }
+
+  .logo {
+    font-size: var(--font-size-md);
+    margin-right: 4px;
+  }
+
+  .nav {
+    overflow-x: auto;
+    scrollbar-width: none;
+    flex-shrink: 1;
+  }
+
+  .nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .navBtn {
+    padding: 4px 10px;
+    font-size: 11px;
+  }
+}

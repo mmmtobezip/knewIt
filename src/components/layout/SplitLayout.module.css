@@ -1,0 +1,29 @@
+.layout {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.ratio7030 {
+  grid-template-columns: 70fr 30fr;
+}
+
+.ratio3070 {
+  grid-template-columns: 30fr 70fr;
+}
+
+.ratio5050 {
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (max-width: 768px) {
+  .layout {
+    padding: 12px;
+  }
+
+  .ratio7030,
+  .ratio3070,
+  .ratio5050 {
+    grid-template-columns: 1fr;
+  }
+}

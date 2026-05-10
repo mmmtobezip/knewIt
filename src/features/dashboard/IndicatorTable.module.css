@@ -1,0 +1,50 @@
+.wrapper {
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.title {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  padding: var(--spacing-lg) var(--spacing-xl);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.indicatorName {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.value {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.unit {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  margin-left: 2px;
+}
+
+.change {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+}
+
+.changeUp {
+  color: var(--red);
+}
+
+.changeDown {
+  color: var(--blue);
+}
+
+.changeFlat {
+  color: var(--text-tertiary);
+}
