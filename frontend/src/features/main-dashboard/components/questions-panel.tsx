@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Lightbulb } from 'lucide-react';
-import { useTodayQuestions, useTriggerEvent } from '@/lib/api/queries/dashboard';
+import { useTodayQuestions } from '@/lib/api/queries/dashboard';
 import { useSelectionStore } from '@/stores/selection-store';
 import { useChatStore } from '@/stores/chat-store';
 import { streamChat } from '@/services/chat-stream.service';
@@ -26,7 +26,6 @@ import { cn } from '@/shared/utils/cn';
 export function QuestionsPanel() {
   const { customerId, productCode } = useSelectionStore();
   const questionsQuery = useTodayQuestions(customerId);
-  const triggerQuery = useTriggerEvent(productCode, new Date().toISOString().slice(0, 10));
 
   const appendUserMessage = useChatStore((s) => s.appendUserMessage);
   const startAssistantMessage = useChatStore((s) => s.startAssistantMessage);
@@ -170,13 +169,6 @@ export function QuestionsPanel() {
               </p>
             </motion.button>
           ))}
-        </div>
-      )}
-
-      {/* trigger_event 없음 안내 (보조 메시지) */}
-      {!triggerQuery.isLoading && !triggerQuery.data && (
-        <div className="mt-4 rounded-xl bg-toss-blue-bg p-3 text-xs font-medium text-gray-700">
-          오늘은 주요 변동이 없습니다.
         </div>
       )}
     </div>
