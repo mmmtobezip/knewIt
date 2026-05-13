@@ -1,0 +1,97 @@
+/* Pretendard 웹폰트 — @import 는 파일 최상단 위치 필수 */
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.css');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ──────────────────────────────────────────────────────────
+   Toss 디자인 시스템 토큰
+   wireframe-spec.md § 5 디자인 토큰 참조
+   ────────────────────────────────────────────────────────── */
+:root {
+  /* Toss Blue 계열 (브랜드 컬러) */
+  --toss-blue: 49 130 246;          /* #3182F6 */
+  --toss-blue-hover: 27 100 218;    /* #1B64DA */
+  --toss-blue-light: 232 243 255;   /* #E8F3FF */
+  --toss-blue-bg: 244 249 255;      /* #F4F9FF */
+
+  /* Gray Scale 9단계 */
+  --gray-900: 25 31 40;             /* #191F28 - primary text */
+  --gray-800: 51 61 75;             /* #333D4B */
+  --gray-700: 78 89 104;            /* #4E5968 */
+  --gray-600: 107 118 132;          /* #6B7684 */
+  --gray-500: 139 149 161;          /* #8B95A1 - placeholder */
+  --gray-400: 176 184 193;          /* #B0B8C1 */
+  --gray-300: 209 214 219;          /* #D1D6DB */
+  --gray-200: 229 232 235;          /* #E5E8EB - divider */
+  --gray-100: 242 244 246;          /* #F2F4F6 - card alt bg */
+  --gray-50: 249 250 251;           /* #F9FAFB */
+
+  /* Semantic */
+  --red: 240 68 82;                 /* #F04452 - 가격 상승 */
+  --green: 0 200 150;               /* #00C896 */
+  --yellow: 255 176 32;             /* #FFB020 */
+
+  /* AI 진단 카드 배경 (§ 3-3 AREA-MAIN-08) */
+  --diag-what: 254 241 242;         /* #FEF1F2 */
+  --diag-why: 255 248 229;          /* #FFF8E5 */
+  --diag-impact: 232 250 243;       /* #E8FAF3 */
+
+  /* 페이지 배경 */
+  --bg: 242 244 246;                /* #F2F4F6 */
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background-color: rgb(var(--bg));
+  color: rgb(var(--gray-900));
+  font-family:
+    'Pretendard',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Apple SD Gothic Neo',
+    'Noto Sans KR',
+    sans-serif;
+  font-size: 15px;
+  letter-spacing: -0.3px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 스크롤바 (Toss 스타일) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--gray-300));
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--gray-400));
+}
+
+/* 포커스 링 (A11y) */
+:focus-visible {
+  outline: 2px solid rgb(var(--toss-blue));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+button:focus,
+a:focus,
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+}

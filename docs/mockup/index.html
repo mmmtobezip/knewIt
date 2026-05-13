@@ -1,0 +1,1462 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>POS-Pricing Navigator</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  /* ===== Toss Design System ===== */
+  :root {
+    --toss-blue: #3182F6;
+    --toss-blue-hover: #1B64DA;
+    --toss-blue-light: #E8F3FF;
+    --toss-blue-bg: #F4F9FF;
+    --gray-900: #191F28;
+    --gray-800: #333D4B;
+    --gray-700: #4E5968;
+    --gray-600: #6B7684;
+    --gray-500: #8B95A1;
+    --gray-400: #B0B8C1;
+    --gray-300: #D1D6DB;
+    --gray-200: #E5E8EB;
+    --gray-100: #F2F4F6;
+    --gray-50: #F9FAFB;
+    --bg: #F2F4F6;
+    --red: #F04452;
+    --green: #00C896;
+    --yellow: #FFB020;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Toss Product Sans', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+    background: var(--bg);
+    color: var(--gray-900);
+    padding: 24px;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: -0.3px;
+  }
+  .container { max-width: 1500px; margin: 0 auto; }
+
+  /* Header */
+  .header {
+    background: #fff;
+    border-radius: 20px;
+    padding: 20px 28px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 16px;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--gray-900);
+    letter-spacing: -0.5px;
+  }
+  .logo-icon {
+    width: 36px; height: 36px;
+    background: var(--toss-blue);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 800;
+    font-size: 16px;
+  }
+  .subtitle {
+    color: var(--gray-500);
+    font-size: 14px;
+    font-weight: 500;
+    padding-left: 14px;
+    border-left: 1px solid var(--gray-200);
+  }
+  .header-spacer { flex: 1; }
+  .select-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+    background: var(--gray-100);
+    border: none;
+    border-radius: 12px;
+    padding: 12px 16px;
+    min-width: 200px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .select-box:hover { background: var(--gray-200); }
+  .select-box select {
+    background: transparent;
+    border: none;
+    outline: none;
+    flex: 1;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--gray-900);
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 16px;
+    letter-spacing: -0.3px;
+  }
+  .select-box::after {
+    content: '';
+    width: 8px; height: 8px;
+    border-right: 2px solid var(--gray-500);
+    border-bottom: 2px solid var(--gray-500);
+    transform: rotate(45deg);
+    position: absolute;
+    right: 16px;
+    top: calc(50% - 6px);
+    pointer-events: none;
+  }
+  .select-box .icon {
+    margin-right: 8px;
+    font-size: 16px;
+  }
+  .btn-refresh {
+    background: var(--gray-100);
+    border: none;
+    border-radius: 12px;
+    padding: 12px 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--gray-800);
+    transition: background 0.15s;
+  }
+  .btn-refresh:hover { background: var(--gray-200); }
+
+  /* Quick Navigation Cards (Main Dashboard) */
+  .quick-nav {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .quick-nav-card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.15s;
+    cursor: pointer;
+  }
+  .quick-nav-card:hover {
+    background: var(--toss-blue-bg);
+  }
+  .quick-nav-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: var(--toss-blue-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .quick-nav-body { flex: 1; }
+  .quick-nav-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--gray-900);
+    margin-bottom: 2px;
+    letter-spacing: -0.3px;
+  }
+  .quick-nav-desc {
+    font-size: 12px;
+    color: var(--gray-600);
+    font-weight: 500;
+    letter-spacing: -0.3px;
+  }
+  .quick-nav-arrow {
+    font-size: 20px;
+    color: var(--gray-400);
+    font-weight: 300;
+  }
+
+  /* Mail draft view */
+  .mail-section {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 16px;
+  }
+  .mail-template-list {
+    background: #fff;
+    border-radius: 20px;
+    padding: 24px;
+  }
+  .mail-template-list h3 {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--gray-900);
+    margin-bottom: 18px;
+    letter-spacing: -0.4px;
+  }
+  .template-card {
+    background: var(--gray-100);
+    border: none;
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .template-card:hover { background: var(--toss-blue-bg); }
+  .template-card.active { background: var(--toss-blue-light); }
+  .template-card-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--gray-900);
+    margin-bottom: 6px;
+    letter-spacing: -0.3px;
+  }
+  .template-card-desc {
+    font-size: 12px;
+    color: var(--gray-600);
+    line-height: 1.5;
+    font-weight: 500;
+  }
+  .template-tag {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: var(--toss-blue);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    letter-spacing: 0.3px;
+  }
+
+  .mail-editor {
+    background: #fff;
+    border-radius: 20px;
+    padding: 28px;
+  }
+  .mail-editor h3 {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--gray-900);
+    margin-bottom: 20px;
+    letter-spacing: -0.4px;
+  }
+  .mail-field {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid var(--gray-200);
+    padding: 14px 0;
+  }
+  .mail-field-label {
+    width: 80px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--gray-700);
+    flex-shrink: 0;
+  }
+  .mail-field-value {
+    flex: 1;
+    font-size: 15px;
+    color: var(--gray-900);
+    border: none;
+    outline: none;
+    background: transparent;
+    font-weight: 500;
+    font-family: inherit;
+    letter-spacing: -0.3px;
+  }
+  .mail-body {
+    width: 100%;
+    min-height: 320px;
+    padding: 20px 0;
+    border: none;
+    outline: none;
+    resize: vertical;
+    font-family: inherit;
+    font-size: 15px;
+    line-height: 1.75;
+    color: var(--gray-800);
+    font-weight: 500;
+    letter-spacing: -0.3px;
+  }
+  .mail-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--gray-200);
+  }
+  .btn-primary {
+    background: var(--toss-blue);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 14px 24px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: -0.3px;
+    transition: background 0.15s;
+  }
+  .btn-primary:hover { background: var(--toss-blue-hover); }
+  .btn-secondary {
+    background: var(--gray-100);
+    color: var(--gray-800);
+    border: none;
+    border-radius: 12px;
+    padding: 14px 24px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: -0.3px;
+    transition: background 0.15s;
+  }
+  .btn-secondary:hover { background: var(--gray-200); }
+  .btn-ai-rewrite {
+    background: linear-gradient(135deg, #3182F6, #1B64DA);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 14px 20px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: -0.3px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+  }
+
+  .refresh-icon { display: inline-block; transition: transform 0.6s; }
+  .refresh-icon.spinning {
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  /* Refresh overlay */
+  .refresh-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(2px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .refresh-overlay.show { display: flex; }
+  .spinner {
+    width: 56px;
+    height: 56px;
+    border: 5px solid #e5e7eb;
+    border-top-color: #2563eb;
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+  .refresh-text {
+    color: #1e40af;
+    font-weight: 600;
+    font-size: 14px;
+  }
+
+  /* Content fade-in pulse */
+  .pulse {
+    animation: pulse 0.6s ease-out;
+  }
+  @keyframes pulse {
+    0% { opacity: 0.3; transform: translateY(6px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: #1e293b;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 30px;
+    font-size: 13px;
+    z-index: 10000;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.4s;
+    opacity: 0;
+  }
+  .toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+  .toast .check {
+    color: #10b981;
+    margin-right: 6px;
+  }
+  .icon-btn {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: var(--gray-100);
+    border: none;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    transition: background 0.15s;
+  }
+  .icon-btn:hover { background: var(--gray-200); }
+
+  /* Top Section: Questions + Chat */
+  .top-section {
+    background: #fff;
+    border-radius: 20px;
+    padding: 28px;
+    margin-bottom: 16px;
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 28px;
+  }
+  .questions-panel h3 {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 17px; color: var(--gray-900);
+    font-weight: 700;
+    margin-bottom: 18px;
+    letter-spacing: -0.4px;
+  }
+  .question-card {
+    background: var(--gray-100);
+    border: none;
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    display: flex;
+    gap: 12px;
+    transition: all 0.15s;
+  }
+  .question-card:hover { background: var(--toss-blue-bg); }
+  .question-card.active {
+    background: var(--toss-blue-light);
+  }
+  .question-num {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--toss-blue);
+    color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700;
+    flex-shrink: 0;
+  }
+  .question-card:not(.active) .question-num {
+    background: var(--gray-300);
+    color: var(--gray-600);
+  }
+  .question-text {
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--gray-800);
+    font-weight: 600;
+    letter-spacing: -0.3px;
+  }
+
+  .chat-panel {
+    background: var(--gray-50);
+    border-radius: 16px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    min-height: 300px;
+  }
+  .chat-bubble-user {
+    align-self: flex-end;
+    background: var(--toss-blue);
+    color: white;
+    padding: 14px 20px;
+    border-radius: 20px 20px 4px 20px;
+    max-width: 75%;
+    margin-bottom: 6px;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+  }
+  .chat-meta {
+    font-size: 12px;
+    color: var(--gray-500);
+    margin-bottom: 16px;
+    text-align: right;
+    font-weight: 500;
+  }
+  .chat-bubble-ai {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 6px;
+    align-items: flex-start;
+  }
+  .ai-avatar {
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    background: #d6ecff;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    box-shadow: 0 2px 6px rgba(59, 130, 246, 0.25);
+    overflow: hidden;
+    border: 2px solid #fff;
+  }
+  .ai-avatar svg { width: 100%; height: 100%; }
+  .ai-name {
+    font-size: 10px;
+    color: #1e40af;
+    font-weight: 700;
+    text-align: center;
+    margin-top: 2px;
+  }
+  .ai-avatar-wrap { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+  .ai-content {
+    background: #fff;
+    border: none;
+    border-radius: 4px 20px 20px 20px;
+    padding: 16px 20px;
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--gray-800);
+    flex: 1;
+    font-weight: 500;
+    letter-spacing: -0.3px;
+  }
+  .chat-input {
+    margin-top: 20px;
+    display: flex;
+    background: #fff;
+    border: none;
+    border-radius: 14px;
+    padding: 16px 20px;
+    align-items: center;
+  }
+  .chat-input input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--gray-900);
+    letter-spacing: -0.3px;
+  }
+  .chat-input input::placeholder { color: var(--gray-500); }
+  .send-btn {
+    background: var(--toss-blue);
+    border: none;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .send-btn:hover { background: var(--toss-blue-hover); }
+
+  /* Middle Section: Chart + Cause Flow */
+  .middle-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .card {
+    background: #fff;
+    border-radius: 20px;
+    padding: 28px;
+  }
+  .card-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--gray-900);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: -0.4px;
+  }
+  .card-subtitle {
+    color: var(--gray-500);
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .price-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 14px;
+  }
+  .price-label {
+    font-size: 14px;
+    color: var(--gray-600);
+    margin-bottom: 6px;
+    font-weight: 500;
+  }
+  .price-value {
+    font-size: 40px;
+    font-weight: 800;
+    color: var(--gray-900);
+    letter-spacing: -1px;
+    line-height: 1;
+  }
+  .price-change {
+    color: var(--red);
+    font-size: 14px;
+    font-weight: 700;
+    margin-left: 10px;
+    letter-spacing: -0.3px;
+  }
+  .period-tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--gray-100);
+    padding: 4px;
+    border-radius: 10px;
+  }
+  .period-tab {
+    padding: 7px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    color: var(--gray-600);
+    border: none;
+    background: transparent;
+    font-weight: 600;
+    transition: all 0.15s;
+  }
+  .period-tab.active {
+    background: #fff;
+    color: var(--gray-900);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .chart-container {
+    height: 220px;
+    margin-top: 14px;
+  }
+
+  /* Cause Flow */
+  .flow-container {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  .flow-step {
+    background: var(--gray-100);
+    border: none;
+    border-radius: 14px;
+    padding: 16px 10px;
+    text-align: center;
+    position: relative;
+  }
+  .flow-icon {
+    font-size: 26px;
+    margin-bottom: 8px;
+  }
+  .flow-text {
+    font-size: 12px;
+    color: var(--gray-800);
+    line-height: 1.5;
+    margin-bottom: 6px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+  }
+  .flow-arrow {
+    color: var(--red);
+    font-size: 14px;
+  }
+  .flow-connector {
+    position: absolute;
+    right: -10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--gray-400);
+    font-size: 12px;
+    z-index: 2;
+  }
+  .interpretation {
+    background: var(--toss-blue-bg);
+    border-left: none;
+    border-radius: 14px;
+    padding: 16px 20px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--gray-800);
+    font-weight: 500;
+    letter-spacing: -0.3px;
+  }
+  .interpretation-title {
+    font-weight: 700;
+    color: var(--toss-blue);
+    margin-bottom: 6px;
+    font-size: 14px;
+  }
+
+  /* News Sources */
+  .news-card {
+    background: #fff;
+    border-radius: 20px;
+    padding: 20px 28px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+  .news-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--gray-900);
+    flex-shrink: 0;
+    letter-spacing: -0.4px;
+  }
+  .news-list {
+    display: flex;
+    gap: 8px;
+    flex: 1;
+    overflow-x: auto;
+  }
+  .news-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--gray-100);
+    border: none;
+    border-radius: 12px;
+    padding: 10px 14px;
+    text-decoration: none;
+    color: var(--gray-800);
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+  .news-item:hover {
+    background: var(--toss-blue-light);
+  }
+  .news-logo {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 800;
+    color: white;
+    flex-shrink: 0;
+  }
+  .news-name { font-size: 13px; font-weight: 700; letter-spacing: -0.3px; }
+  .news-date { font-size: 12px; color: var(--gray-500); font-weight: 500; }
+  .news-more {
+    color: var(--toss-blue);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  /* Bottom Section: Diagnosis + Strategy */
+  .bottom-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .diag-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .diag-card {
+    border-radius: 16px;
+    padding: 18px;
+    border-left: none;
+  }
+  .diag-card.what { background: #FEF1F2; }
+  .diag-card.why { background: #FFF8E5; }
+  .diag-card.impact { background: #E8FAF3; }
+  .diag-label {
+    font-size: 12px;
+    font-weight: 800;
+    margin-bottom: 10px;
+    letter-spacing: 0.5px;
+  }
+  .diag-card.what .diag-label { color: var(--red); }
+  .diag-card.why .diag-label { color: #D97706; }
+  .diag-card.impact .diag-label { color: #00A878; }
+  .diag-content {
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--gray-800);
+    font-weight: 500;
+    letter-spacing: -0.3px;
+  }
+  .diag-content ul { list-style: none; padding: 0; }
+  .diag-content li { padding-left: 12px; position: relative; margin-bottom: 6px; }
+  .diag-content li::before {
+    content: '•';
+    position: absolute;
+    left: 0;
+    color: var(--gray-500);
+  }
+
+  .strat-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .strat-card {
+    background: var(--gray-100);
+    border: none;
+    border-radius: 16px;
+    padding: 18px;
+  }
+  .strat-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--gray-900);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    letter-spacing: -0.3px;
+  }
+  .strat-content {
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--gray-700);
+    font-weight: 500;
+    letter-spacing: -0.3px;
+  }
+  .strat-content ol {
+    padding-left: 20px;
+    margin: 0;
+  }
+  .strat-content ol li { margin-bottom: 6px; }
+  .quote-box {
+    background: var(--toss-blue-light);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--toss-blue);
+    font-weight: 600;
+    line-height: 1.5;
+    letter-spacing: -0.3px;
+  }
+</style>
+</head>
+<body>
+<div class="refresh-overlay" id="refreshOverlay">
+  <div class="spinner"></div>
+  <div class="refresh-text">최신 데이터를 불러오는 중...</div>
+</div>
+<div class="toast" id="toast"><span class="check">✓</span><span id="toastMsg">데이터가 갱신되었습니다</span></div>
+
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="logo">
+      <div class="logo-icon">P</div>
+      <span>POS-Pricing Navigator</span>
+    </div>
+    <div class="subtitle">AI 시장 분석 &amp; 협상 전략</div>
+    <div class="header-spacer"></div>
+
+    <div class="select-box">
+      <span class="icon">📦</span>
+      <select id="productSelect">
+        <option value="hotrolled">열연강판</option>
+        <option value="coldrolled">냉연강판</option>
+        <option value="galvanized">아연도금강판</option>
+        <option value="rebar">철근</option>
+      </select>
+    </div>
+
+    <div class="select-box">
+      <span class="icon">🏢</span>
+      <select id="customerSelect">
+        <option value="hyundai">현대자동차</option>
+        <option value="kia">기아</option>
+        <option value="samsung">삼성중공업</option>
+        <option value="hyundaiheavy">현대중공업</option>
+      </select>
+    </div>
+
+    <button class="btn-refresh" id="refreshBtn"><span class="refresh-icon">🔄</span> 새로고침</button>
+    <button class="icon-btn">🔔</button>
+    <button class="icon-btn">👤</button>
+  </div>
+
+  <!-- Quick Navigation Cards -->
+  <div class="quick-nav">
+    <a class="quick-nav-card" href="guide.html">
+      <div class="quick-nav-icon">📊</div>
+      <div class="quick-nav-body">
+        <div class="quick-nav-title">판매 가이드</div>
+        <div class="quick-nav-desc">고객사별 맞춤 협상 시나리오와 토킹 포인트</div>
+      </div>
+      <div class="quick-nav-arrow">›</div>
+    </a>
+    <a class="quick-nav-card" href="mail.html">
+      <div class="quick-nav-icon">✉️</div>
+      <div class="quick-nav-body">
+        <div class="quick-nav-title">메일 초안 작성</div>
+        <div class="quick-nav-desc">AI가 작성하는 고객사 맞춤 메일 템플릿</div>
+      </div>
+      <div class="quick-nav-arrow">›</div>
+    </a>
+  </div>
+
+
+  <!-- Top: Questions + Chat -->
+  <div class="top-section">
+    <div class="questions-panel">
+      <h3>💡 오늘의 추천 질문</h3>
+      <div id="questionList"></div>
+    </div>
+    <div class="chat-panel">
+      <div class="chat-bubble-user" id="userQuestion">열연 가격 하락세는 언제까지 지속될 가능성이 높을까요?</div>
+      <div class="chat-meta">09:30</div>
+      <div class="chat-bubble-ai">
+        <div class="ai-avatar-wrap">
+          <div class="ai-avatar">
+            <svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+              <!-- Background -->
+              <rect width="80" height="80" fill="#d6ecff"/>
+              <!-- Ears (white bear) -->
+              <circle cx="20" cy="26" r="8" fill="#ffffff" stroke="#7fb3e0" stroke-width="1.2"/>
+              <circle cx="60" cy="26" r="8" fill="#ffffff" stroke="#7fb3e0" stroke-width="1.2"/>
+              <circle cx="20" cy="26" r="4" fill="#bfe0ff"/>
+              <circle cx="60" cy="26" r="4" fill="#bfe0ff"/>
+              <!-- Head (plumper) -->
+              <ellipse cx="40" cy="40" rx="28" ry="24" fill="#ffffff" stroke="#7fb3e0" stroke-width="1.2"/>
+              <!-- Helmet (posco hard hat) -->
+              <path d="M 14 28 Q 40 8 66 28 L 66 33 L 14 33 Z" fill="#ffffff" stroke="#7fb3e0" stroke-width="1.2"/>
+              <rect x="14" y="31" width="52" height="4" rx="1" fill="#ffffff" stroke="#7fb3e0" stroke-width="1"/>
+              <!-- Helmet stripes -->
+              <line x1="36" y1="15" x2="36" y2="24" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="40" y1="13" x2="40" y2="24" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="44" y1="15" x2="44" y2="24" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round"/>
+              <!-- Helmet logo -->
+              <text x="40" y="29.5" text-anchor="middle" font-size="5" font-weight="700" fill="#1e3a8a" font-family="Arial, sans-serif">posco</text>
+              <!-- Cheeks (plumper) -->
+              <ellipse cx="20" cy="46" rx="9" ry="8" fill="#fbbcd0" opacity="0.9"/>
+              <ellipse cx="60" cy="46" rx="9" ry="8" fill="#fbbcd0" opacity="0.9"/>
+              <!-- Eyes -->
+              <circle cx="32" cy="43" r="2.4" fill="#1f2937"/>
+              <circle cx="48" cy="43" r="2.4" fill="#1f2937"/>
+              <!-- Nose & mouth -->
+              <ellipse cx="40" cy="48" rx="1.6" ry="1.3" fill="#1f2937"/>
+              <path d="M 37 51 Q 40 54 43 51" stroke="#1f2937" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+              <!-- Body (orange uniform) -->
+              <path d="M 22 60 Q 22 56 26 56 L 54 56 Q 58 56 58 60 L 58 80 L 22 80 Z" fill="#fb923c" stroke="#ea580c" stroke-width="1"/>
+              <!-- Collar -->
+              <path d="M 32 56 L 40 62 L 48 56" fill="#ffffff" stroke="#ea580c" stroke-width="1"/>
+              <!-- Pocket -->
+              <rect x="46" y="64" width="6" height="6" fill="none" stroke="#c2410c" stroke-width="1"/>
+              <!-- Name tag -->
+              <rect x="28" y="64" width="6" height="3" fill="#fde047" stroke="#a16207" stroke-width="0.5"/>
+            </svg>
+          </div>
+          <div class="ai-name">포석호</div>
+        </div>
+        <div class="ai-content" id="aiAnswer">
+          현재 가격 하락세는 단기적으로 2~4주 추가 지속될 가능성이 높습니다.<br/>
+          중국 내수 둔화와 수출 증가로 인한 공급 과잉이 주요 요인으로 작용하고 있으며,<br/>
+          글로벌 원료 가격 하락 압력도 이어지고 있습니다.<br/>
+          다만, 6월 이후 중국의 정책 대응과 계절적 수요 회복 여부에 따라<br/>
+          하락 폭은 점진적으로 둔화될 것으로 예상됩니다.
+        </div>
+      </div>
+      <div class="chat-meta">09:30</div>
+      <div class="chat-input">
+        <input type="text" placeholder="추가 질문을 입력하세요..." />
+        <button class="send-btn">➤</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Middle: Chart + Cause Flow -->
+  <div class="middle-section">
+    <div class="card">
+      <div class="card-title">📊 변동이 크게 발생한 지표 분석 결과</div>
+      <div class="price-header">
+        <div>
+          <div class="price-label" id="priceLabel">열연강판 가격 (USD/톤)</div>
+          <div>
+            <span class="price-value" id="priceValue">580</span>
+            <span class="price-change" id="priceChange">▼ 4.2% (WoW)</span>
+          </div>
+        </div>
+        <div class="period-tabs">
+          <button class="period-tab">1D</button>
+          <button class="period-tab">1W</button>
+          <button class="period-tab active">1M</button>
+          <button class="period-tab">3M</button>
+          <button class="period-tab">6M</button>
+          <button class="period-tab">1Y</button>
+        </div>
+      </div>
+      <div class="chart-container">
+        <canvas id="priceChart"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">변동 발생 원인 플로우 <span class="card-subtitle">(순차 원인 분석)</span></div>
+      <div class="flow-container" id="flowContainer"></div>
+      <div class="interpretation">
+        <div class="interpretation-title">핵심 해석</div>
+        <div id="interpretationText">
+          중국 내수 둔화로 인한 수요 감소 우려가 수출 증가로 이어지며,<br/>
+          글로벌 공급 과잉이 심화되어 가격 하락 압력으로 작용
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- News Sources -->
+  <div class="news-card">
+    <div class="news-title">📰 근거 데이터 <span class="card-subtitle">(뉴스 출처)</span></div>
+    <div class="news-list" id="newsList"></div>
+    <a class="news-more" href="#" onclick="alert('더 많은 뉴스를 확인합니다.'); return false;">더보기 ›</a>
+  </div>
+
+  <!-- Bottom: AI Diagnosis + Strategy -->
+  <div class="bottom-section">
+    <div class="card">
+      <div class="card-title">🔺 AI 진단 <span class="card-subtitle">(무슨 일이 일어나고 있는가?)</span></div>
+      <div class="diag-cards">
+        <div class="diag-card what">
+          <div class="diag-label">WHAT</div>
+          <div class="diag-content" id="diagWhat">
+            열연강판 가격은 전주 대비 4.2% 하락하여 톤당 $580 기록.<br/><br/>
+            향후 2~4주 추가 하락 가능성 높음
+          </div>
+        </div>
+        <div class="diag-card why">
+          <div class="diag-label">WHY</div>
+          <div class="diag-content">
+            <ul id="diagWhy">
+              <li>중국 제조업 PMI 하락</li>
+              <li>내수 수요 둔화 우려 확대</li>
+              <li>수출 증가로 공급 과잉 심화</li>
+              <li>원료(철광석/원료탄) 가격 약세 지속</li>
+            </ul>
+          </div>
+        </div>
+        <div class="diag-card impact">
+          <div class="diag-label">IMPACT</div>
+          <div class="diag-content">
+            <ul id="diagImpact">
+              <li>글로벌 열연 가격 추가 하락 압력</li>
+              <li>고객사 가격 인하 요구 증가 가능성</li>
+              <li>마진 압박 확대 및 수익성 악화 위험</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">💬 권장 대응 전략 <span class="card-subtitle">(무엇을 할 것인가?)</span></div>
+      <div class="strat-cards">
+        <div class="strat-card">
+          <div class="strat-title">🛡️ 전략 요약</div>
+          <div class="strat-content" id="stratSummary">
+            단기 가격 방어보다 고객 신뢰 유지에 집중하며,<br/>
+            시장 변동성 속에서 공급 안정성과 차별화된 가치를 강조하는 전략이 필요합니다.
+          </div>
+        </div>
+        <div class="strat-card">
+          <div class="strat-title">✅ 추천 행동</div>
+          <div class="strat-content">
+            <ol id="stratActions">
+              <li>선제 커뮤니케이션 진행</li>
+              <li>시장 및 원가 변동 데이터 공유</li>
+              <li>장기 계약 또는 물량 연동 조건 제안</li>
+              <li>내부 원가 절감 및 효율화 추진</li>
+            </ol>
+          </div>
+        </div>
+        <div class="strat-card">
+          <div class="strat-title">💬 협상 포인트</div>
+          <div class="strat-content" id="stratNegotiation">
+            단기 가격보다 공급 안정성과<br/>
+            파트너십 가치를 강조하세요.
+          </div>
+          <div class="quote-box" id="stratQuote">
+            ❝ '가격보다 공급 안정성이 더 큰 가치를 제공합니다.' ❞
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+</div>
+
+<script>
+// ========== DATA ==========
+const productData = {
+  hotrolled: {
+    name: '열연강판',
+    price: 580,
+    change: '▼ 4.2% (WoW)',
+    chartData: [635, 638, 642, 645, 648, 652, 650, 645, 640, 635, 628, 620, 615, 608, 600, 595, 590, 585, 580],
+    flow: [
+      { icon: '🏭', text: '중국 제조업 PMI 지수 하락' },
+      { icon: '📉', text: '중국 철강 수요 둔화 우려' },
+      { icon: '🚢', text: '수출 물량 증가 (공급 과잉)' },
+      { icon: '📊', text: '글로벌 열연 강판 가격 하락' }
+    ],
+    interpretation: '중국 내수 둔화로 인한 수요 감소 우려가 수출 증가로 이어지며,<br/>글로벌 공급 과잉이 심화되어 가격 하락 압력으로 작용',
+    diagWhat: '열연강판 가격은 전주 대비 4.2% 하락하여 톤당 $580 기록.<br/><br/>향후 2~4주 추가 하락 가능성 높음',
+    diagWhy: ['중국 제조업 PMI 하락', '내수 수요 둔화 우려 확대', '수출 증가로 공급 과잉 심화', '원료(철광석/원료탄) 가격 약세 지속'],
+    diagImpact: ['글로벌 열연 가격 추가 하락 압력', '고객사 가격 인하 요구 증가 가능성', '마진 압박 확대 및 수익성 악화 위험']
+  },
+  coldrolled: {
+    name: '냉연강판',
+    price: 720,
+    change: '▼ 2.8% (WoW)',
+    chartData: [760, 758, 755, 752, 750, 748, 745, 742, 740, 738, 735, 732, 730, 728, 725, 724, 722, 721, 720],
+    flow: [
+      { icon: '🏗️', text: '글로벌 자동차 생산 감소' },
+      { icon: '📉', text: '냉연 수요 위축' },
+      { icon: '⚙️', text: '재고 부담 가중' },
+      { icon: '📊', text: '냉연강판 가격 약세' }
+    ],
+    interpretation: '자동차 및 가전 수요 둔화로 냉연강판 수요가 위축되며,<br/>제조사 재고 부담이 가격 하락 압력으로 작용',
+    diagWhat: '냉연강판 가격은 전주 대비 2.8% 하락하여 톤당 $720 기록.<br/><br/>자동차 수요 둔화 영향 지속',
+    diagWhy: ['글로벌 자동차 생산 감소', '가전 수요 둔화', '냉연 재고 누적', '대체재(수입재) 가격 경쟁 심화'],
+    diagImpact: ['고급 강재 마진 압박 확대', '자동차사 가격 인하 요구', '재고 회전율 저하 우려']
+  },
+  galvanized: {
+    name: '아연도금강판',
+    price: 810,
+    change: '▼ 1.5% (WoW)',
+    chartData: [830, 828, 826, 824, 822, 820, 819, 818, 817, 816, 815, 814, 813, 812, 811, 811, 810, 810, 810],
+    flow: [
+      { icon: '🔋', text: '아연 LME 가격 하락' },
+      { icon: '🏗️', text: '건설 수요 둔화' },
+      { icon: '📦', text: '재고 증가' },
+      { icon: '📊', text: '아연도금강판 가격 하락' }
+    ],
+    interpretation: '아연 원자재 가격 하락과 건설 경기 부진이 겹치며,<br/>아연도금강판 가격 약세가 점진적으로 진행',
+    diagWhat: '아연도금강판 가격은 전주 대비 1.5% 하락하여 톤당 $810 기록.<br/><br/>건설 수요 회복 지연',
+    diagWhy: ['아연 LME 시세 하락', '건설 경기 둔화', '재고 누적 부담', '수출 단가 압박'],
+    diagImpact: ['건설용 강재 마진 축소', '가격 인하 요구 증가', '판매량 회복 지연 우려']
+  },
+  rebar: {
+    name: '철근',
+    price: 495,
+    change: '▼ 5.6% (WoW)',
+    chartData: [540, 538, 535, 532, 528, 525, 522, 520, 518, 515, 512, 510, 508, 505, 502, 500, 498, 496, 495],
+    flow: [
+      { icon: '🏗️', text: '국내 건설 착공 감소' },
+      { icon: '📉', text: '철근 수요 급감' },
+      { icon: '⚙️', text: '제강사 가동률 하락' },
+      { icon: '📊', text: '철근 시세 급락' }
+    ],
+    interpretation: '건설 경기 침체로 철근 수요가 급감하며,<br/>제강사 가동률 하락에도 가격 방어가 어려운 상황',
+    diagWhat: '철근 가격은 전주 대비 5.6% 하락하여 톤당 $495 기록.<br/><br/>건설 침체로 단기 반등 어려움',
+    diagWhy: ['국내 건설 착공 감소', '주택 분양 부진', '제강사 재고 누적', '수입재 저가 공세'],
+    diagImpact: ['철근 수익성 악화', '제강 가동률 추가 하락 위험', '건설사 단가 인하 요구 강화']
+  }
+};
+
+const customerData = {
+  hyundai: {
+    name: '현대자동차',
+    questions: [
+      '열연 가격 하락세는 언제까지 지속될 가능성이 높을까요?',
+      '현대자동차와 가격 협상 시 어떤 포인트를 강조해야 할까요?',
+      '원가 하락 요인이 반영되기 전, 마진 방어 전략은 무엇이 효과적일까요?'
+    ],
+    answers: [
+      '현재 가격 하락세는 단기적으로 2~4주 추가 지속될 가능성이 높습니다.<br/>중국 내수 둔화와 수출 증가로 인한 공급 과잉이 주요 요인으로 작용하고 있으며,<br/>글로벌 원료 가격 하락 압력도 이어지고 있습니다.<br/>다만, 6월 이후 중국의 정책 대응과 계절적 수요 회복 여부에 따라<br/>하락 폭은 점진적으로 둔화될 것으로 예상됩니다.',
+      '현대자동차와의 협상에서는 <b>장기 안정 공급</b>과 <b>품질 신뢰도</b>를 핵심 포인트로 강조해야 합니다.<br/>단기 가격 인하 압박에 응대하기보다는, 차세대 전기차 강판 협력과<br/>JIT 납입 안정성을 카드로 활용하는 전략이 효과적입니다.',
+      '원가 하락 반영 시점을 늦추기 위해 <b>물량 연동 계약</b> 및 <b>장기 ASP 협정</b> 체결을 추천드립니다.<br/>내부적으로는 원가 절감 TF 가동과 고부가가치 강종 비중 확대로<br/>마진 방어선을 구축하는 전략이 유효합니다.'
+    ],
+    stratSummary: '단기 가격 방어보다 <b>고객 신뢰 유지</b>에 집중하며, 시장 변동성 속에서<br/>공급 안정성과 차별화된 가치를 강조하는 전략이 필요합니다.',
+    stratActions: ['선제 커뮤니케이션 진행', '시장 및 원가 변동 데이터 공유', '장기 계약 또는 물량 연동 조건 제안', '내부 원가 절감 및 효율화 추진'],
+    stratNegotiation: '단기 가격보다 공급 안정성과<br/>파트너십 가치를 강조하세요.',
+    stratQuote: "❝ '가격보다 공급 안정성이 더 큰 가치를 제공합니다.' ❞"
+  },
+  kia: {
+    name: '기아',
+    questions: [
+      '기아 EV 라인 강판 수요는 어떤 추세인가요?',
+      '기아와의 단가 협상 시 어떤 카드를 활용해야 할까요?',
+      '소형 SUV 차종 확대에 따른 강종 믹스 전략은?'
+    ],
+    answers: [
+      '기아의 EV 라인 강판 수요는 <b>전년 대비 18% 성장</b>하고 있으며,<br/>특히 고장력 강판 비중이 빠르게 확대되는 추세입니다.<br/>EV9, EV6 등 주력 모델의 글로벌 생산 확대로 향후 12개월간<br/>안정적 수요가 지속될 것으로 전망됩니다.',
+      '기아와의 협상에서는 <b>EV 전용 강종 공동 개발</b>과 <b>해외 공장 글로벌 공급망</b>을 카드로 활용하는 것이 효과적입니다.<br/>가격보다는 신차 모델 공동 R&D를 강조해 협상 우위를 확보하세요.',
+      '소형 SUV 비중 확대에 따라 <b>경량화 고장력 강판</b> 비중을 30% 이상으로 늘리는 믹스 전환이 필요합니다.<br/>동시에 도금재 라인업 확장을 통해 단가 인상 여력을 확보하는 전략이 유효합니다.'
+    ],
+    stratSummary: '기아의 EV 라인 성장에 맞춰 <b>고부가가치 강종 비중 확대</b>와<br/>전략적 파트너십 강화에 집중하는 전략이 필요합니다.',
+    stratActions: ['EV 전용 강종 공동 개발 제안', '글로벌 공장 공급 확대 협의', '경량화 강판 단가 차별화', '신규 강종 인증 일정 가속화'],
+    stratNegotiation: '신차 R&D 협력과 EV 전용<br/>강종 공급 역량을 어필하세요.',
+    stratQuote: "❝ '기아의 EV 성공 파트너로 함께하겠습니다.' ❞"
+  },
+  samsung: {
+    name: '삼성중공업',
+    questions: [
+      '조선용 후판 가격 전망은 어떻게 봐야 할까요?',
+      '삼성중공업 LNG선 수주 확대에 따른 공급 전략은?',
+      '해양플랜트 강재 수요 회복 시점은 언제일까요?'
+    ],
+    answers: [
+      '조선용 후판 가격은 <b>LNG선 수주 호조</b>로 견조한 흐름을 유지할 전망입니다.<br/>다만, 중국산 후판의 저가 공세가 변수로 작용하고 있어<br/>국내 후판 가격은 강보합 흐름이 예상됩니다.',
+      'LNG선 수주 확대에 대응해 <b>고장력 후판 우선 배정 협약</b>을 체결하고,<br/>분기별 공급 물량 사전 합의로 안정적 공급망을 구축하는 전략이 필요합니다.<br/>특히 9% Ni강 등 특수 강종 공급 역량을 적극 어필하세요.',
+      '해양플랜트 강재 수요는 <b>2026년 하반기부터 회복</b>될 것으로 전망됩니다.<br/>중동 및 동남아 지역 신규 프로젝트 발주가 본격화되면서<br/>고급 후판 수요 확대가 예상됩니다.'
+    ],
+    stratSummary: '조선업 슈퍼사이클에 맞춰 <b>고급 후판 우선 공급</b>과<br/>장기 협력 기반 구축에 집중하는 전략이 필요합니다.',
+    stratActions: ['LNG선용 후판 우선 배정 협약', '특수 강종 공동 인증 추진', '분기별 물량 사전 합의', '신규 프로젝트 사전 영업 강화'],
+    stratNegotiation: '조선 슈퍼사이클 대응을 위한<br/>안정적 공급 파트너십을 제안하세요.',
+    stratQuote: "❝ '슈퍼사이클의 든든한 동반자가 되겠습니다.' ❞"
+  },
+  hyundaiheavy: {
+    name: '현대중공업',
+    questions: [
+      '현대중공업 신규 도크 가동에 따른 강재 수요 전망은?',
+      '특수 후판 단가 인상 협상 타이밍은 언제가 좋을까요?',
+      '경쟁사 대비 차별화 포인트는 무엇인가요?'
+    ],
+    answers: [
+      '현대중공업 신규 도크 가동으로 <b>연간 후판 수요가 약 25% 증가</b>할 것으로 예상됩니다.<br/>특히 컨테이너선과 LNG선 동시 건조 체제 구축으로<br/>고장력 후판 수요가 큰 폭으로 증가할 전망입니다.',
+      '특수 후판 단가 인상은 <b>3분기 초</b>가 최적 타이밍입니다.<br/>원료가 반등과 환율 상승 효과를 근거로 활용할 수 있으며,<br/>경쟁사 대비 품질 우위를 강조해 협상력을 확보하세요.',
+      '주요 차별화 포인트는 <b>품질 일관성</b>, <b>긴급 대응 능력</b>, <b>R&D 협력 역량</b>입니다.<br/>특히 극저온용 강재와 친환경 선박용 강재 라인업이<br/>경쟁사 대비 우위 요소로 작용할 수 있습니다.'
+    ],
+    stratSummary: '신규 도크 가동 수요에 맞춘 <b>안정적 공급 약속</b>과<br/>품질 차별화 기반 협상력 강화 전략이 필요합니다.',
+    stratActions: ['신규 도크 전용 공급 협약', '극저온/친환경 강재 라인업 제안', '품질 일관성 데이터 공유', '긴급 납기 대응 SLA 협의'],
+    stratNegotiation: '품질 차별화와 긴급 대응 역량을<br/>핵심 강점으로 어필하세요.',
+    stratQuote: "❝ '품질로 증명하는 든든한 파트너입니다.' ❞"
+  }
+};
+
+const newsSources = [
+  { name: 'Reuters', date: '2025.05.07', color: '#FF8000', url: 'https://www.reuters.com/markets/commodities/' },
+  { name: 'Bloomberg', date: '2025.05.06', color: '#000000', url: 'https://www.bloomberg.com/markets/commodities' },
+  { name: 'Mysteel', date: '2025.05.06', color: '#C8102E', url: 'https://www.mysteel.net/' },
+  { name: 'CRU', date: '2025.05.05', color: '#003DA5', url: 'https://www.crugroup.com/analysis/steel/' },
+  { name: 'Financial Times', date: '2025.05.03', color: '#FFF1E5', url: 'https://www.ft.com/commodities' }
+];
+
+// ========== STATE ==========
+let currentProduct = localStorage.getItem('product') || 'hotrolled';
+let currentCustomer = localStorage.getItem('customer') || 'hyundai';
+let currentQuestionIdx = 0;
+let priceChart = null;
+
+// ========== RENDER FUNCTIONS ==========
+function renderQuestions() {
+  const list = document.getElementById('questionList');
+  const questions = customerData[currentCustomer].questions;
+  list.innerHTML = questions.map((q, idx) => `
+    <div class="question-card ${idx === currentQuestionIdx ? 'active' : ''}" onclick="selectQuestion(${idx})">
+      <div class="question-num">${idx + 1}</div>
+      <div class="question-text">${q}</div>
+    </div>
+  `).join('');
+}
+
+function selectQuestion(idx) {
+  currentQuestionIdx = idx;
+  const cust = customerData[currentCustomer];
+  document.getElementById('userQuestion').textContent = cust.questions[idx];
+  document.getElementById('aiAnswer').innerHTML = cust.answers[idx];
+  renderQuestions();
+}
+
+function renderProductInfo() {
+  const p = productData[currentProduct];
+  document.getElementById('priceLabel').textContent = `${p.name} 가격 (USD/톤)`;
+  document.getElementById('priceValue').textContent = p.price;
+  document.getElementById('priceChange').textContent = p.change;
+
+  // Flow
+  const flowHtml = p.flow.map((f, idx) => `
+    <div class="flow-step">
+      <div class="flow-icon">${f.icon}</div>
+      <div class="flow-text">${f.text}</div>
+      <div class="flow-arrow">▼</div>
+      ${idx < p.flow.length - 1 ? '<div class="flow-connector">▶</div>' : ''}
+    </div>
+  `).join('');
+  document.getElementById('flowContainer').innerHTML = flowHtml;
+  document.getElementById('interpretationText').innerHTML = p.interpretation;
+
+  // Diagnosis
+  document.getElementById('diagWhat').innerHTML = p.diagWhat;
+  document.getElementById('diagWhy').innerHTML = p.diagWhy.map(x => `<li>${x}</li>`).join('');
+  document.getElementById('diagImpact').innerHTML = p.diagImpact.map(x => `<li>${x}</li>`).join('');
+
+  // Chart
+  renderChart(p.chartData);
+}
+
+function renderCustomerInfo() {
+  const c = customerData[currentCustomer];
+  document.getElementById('stratSummary').innerHTML = c.stratSummary;
+  document.getElementById('stratActions').innerHTML = c.stratActions.map(x => `<li>${x}</li>`).join('');
+  document.getElementById('stratNegotiation').innerHTML = c.stratNegotiation;
+  document.getElementById('stratQuote').innerHTML = c.stratQuote;
+  currentQuestionIdx = 0;
+  renderQuestions();
+  selectQuestion(0);
+}
+
+function renderNews() {
+  const list = document.getElementById('newsList');
+  list.innerHTML = newsSources.map(n => `
+    <a class="news-item" href="${n.url}" target="_blank" rel="noopener noreferrer">
+      <div class="news-logo" style="background:${n.color}; ${n.name === 'Financial Times' ? 'color:#990F3D;' : ''}">${n.name[0]}</div>
+      <div>
+        <div class="news-name">${n.name}</div>
+        <div class="news-date">${n.date}</div>
+      </div>
+    </a>
+  `).join('');
+}
+
+function renderChart(data) {
+  const ctx = document.getElementById('priceChart').getContext('2d');
+  const labels = ['04/08','04/10','04/12','04/14','04/16','04/18','04/20','04/22','04/24','04/26','04/28','04/30','05/02','05/04','05/05','05/06','05/07','05/08','05/08'];
+
+  if (priceChart) priceChart.destroy();
+
+  priceChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: data,
+        borderColor: '#2563eb',
+        backgroundColor: 'rgba(37, 99, 235, 0.08)',
+        borderWidth: 2,
+        fill: true,
+        tension: 0.3,
+        pointRadius: 0,
+        pointHoverRadius: 5,
+        pointBackgroundColor: '#2563eb'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1e293b',
+          callbacks: {
+            label: ctx => `$${ctx.parsed.y}`
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { color: '#9ca3af', font: { size: 11 }, maxTicksLimit: 6 }
+        },
+        y: {
+          grid: { color: '#f3f4f6' },
+          ticks: { color: '#9ca3af', font: { size: 11 } }
+        }
+      }
+    }
+  });
+}
+
+// ========== EVENT LISTENERS ==========
+document.getElementById('productSelect').addEventListener('change', e => {
+  currentProduct = e.target.value;
+  localStorage.setItem('product', currentProduct);
+  renderProductInfo();
+});
+
+document.getElementById('customerSelect').addEventListener('change', e => {
+  currentCustomer = e.target.value;
+  localStorage.setItem('customer', currentCustomer);
+  renderCustomerInfo();
+});
+
+// Restore selections from localStorage
+document.getElementById('productSelect').value = currentProduct;
+document.getElementById('customerSelect').value = currentCustomer;
+
+// Refresh button with simulated reload effect
+document.getElementById('refreshBtn').addEventListener('click', () => {
+  const btn = document.getElementById('refreshBtn');
+  const icon = btn.querySelector('.refresh-icon');
+  const overlay = document.getElementById('refreshOverlay');
+  const toast = document.getElementById('toast');
+  const toastMsg = document.getElementById('toastMsg');
+
+  if (btn.disabled) return;
+  btn.disabled = true;
+  icon.classList.add('spinning');
+  overlay.classList.add('show');
+
+  setTimeout(() => {
+    // Slight randomized price flicker to simulate "fresh data"
+    const p = productData[currentProduct];
+    const delta = (Math.random() - 0.5) * 6;
+    const newPrice = Math.max(1, Math.round((p.price + delta) * 10) / 10);
+    p.price = newPrice;
+    const newLast = newPrice;
+    p.chartData = [...p.chartData.slice(1), newLast];
+
+    renderProductInfo();
+    renderCustomerInfo();
+
+    // Pulse animation on key panels
+    document.querySelectorAll('.card, .top-section, .news-card').forEach(el => {
+      el.classList.remove('pulse');
+      void el.offsetWidth;
+      el.classList.add('pulse');
+    });
+
+    overlay.classList.remove('show');
+    icon.classList.remove('spinning');
+    btn.disabled = false;
+
+    // Toast
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    toastMsg.textContent = `데이터가 갱신되었습니다 (${hh}:${mm} 기준)`;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 2200);
+  }, 900);
+});
+
+document.querySelectorAll('.period-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.period-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+  });
+});
+
+// ========== INIT ==========
+renderNews();
+renderProductInfo();
+renderCustomerInfo();
+</script>
+</body>
+</html>
