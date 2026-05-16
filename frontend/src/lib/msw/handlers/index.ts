@@ -1,12 +1,7 @@
-import { dashboardHandlers } from './dashboard';
-import { chatHandlers } from './chat';
-
 /**
- * MSW 핸들러 통합 export
+ * MSW 핸들러 (PRD 0514 이후 실제 백엔드 직접 연동으로 전환).
  *
- * - dashboardHandlers: API-01 ~ API-08, API-11 (REST mock)
- * - chatHandlers: API-09, API-10 (SSE 스트리밍 mock)
- *
- * 브라우저 워커(browser.ts) 가 이 배열을 setupWorker 에 전달.
+ * .env.local 의 NEXT_PUBLIC_API_MOCKING=disabled 로 운영하며,
+ * 이 파일은 호환을 위해 비어있는 핸들러 배열만 export.
  */
-export const handlers = [...dashboardHandlers, ...chatHandlers];
+export const handlers = [] as const;

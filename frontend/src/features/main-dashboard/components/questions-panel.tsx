@@ -3,29 +3,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Lightbulb } from 'lucide-react';
-import { useTodayQuestions } from '@/lib/api/queries/dashboard';
+import { useAnswerQuestion, useTodayQuestions } from '@/lib/api/queries/dashboard';
 import { useSelectionStore } from '@/stores/selection-store';
 import { useChatStore } from '@/stores/chat-store';
-import { streamChat } from '@/services/chat-stream.service';
 import { toast } from '@/stores/toast-store';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/shared/utils/cn';
 
 /**
- * 추천 질문 패널 (AREA-MAIN-03)
+ * 추천 질문 패널 (PRD 0514 SMI-Bot v1.1).
  *
- * 동작 (index.html 원본 패턴 동일):
- * - 화면 진입 시 첫 번째 질문이 자동 active + 답변이 채팅에 자동 표시
- * - 고객사 변경 시 채팅 세션이 새로 발급되면 → 신규 세션에서 다시 자동 선택
- * - 사용자가 다른 카드 클릭 시 active 전환 + 새 답변 스트리밍
- *
- * 자동 발사 가드:
- * - sessionId 별로 1회만 실행 (autoFiredRef)
- * - 채팅에 메시지가 이미 있거나 스트리밍 중이면 미발사
+ * - 제품(product) 단위 질문 3개 조회
+ * - 질문 카드 클릭 시 JSON 답변(POST /api/today-questions/answer) 호출
+ * - 답변은 채팅 store 의 마지막 assistant 메시지로 표시
  */
 export function QuestionsPanel() {
-  const { customerId, productCode } = useSelectionStore();
-  const questionsQuery = useTodayQuestions(customerId);
+  const { productCode } = useSelectionStore();
+  const questionsQuery = useTodayQuestions(productCode);
+  const answerMutation = useAnswerQuestion();
 
   const appendUserMessage = useChatStore((s) => s.appendUserMessage);
   const startAssistantMessage = useChatStore((s) => s.startAssistantMessage);
@@ -35,98 +30,66 @@ export function QuestionsPanel() {
   const sessionId = useChatStore((s) => s.sessionId);
   const messagesLen = useChatStore((s) => s.messages.length);
 
-  const [activeIdx, setActiveIdx] = useState<number>(0);
-  /** 세션별 자동 발사 1회 가드 */
+  const [activeIdx, setActiveIdx] = useState(0);
   const autoFiredRef = useRef<string | null>(null);
-  /** 진행 중인 SSE 스트림 중단용 */
-  const abortRef = useRef<AbortController | null>(null);
 
-  /**
-   * 질문 선택 → 채팅 초기화 + 새 SSE 스트리밍
-   *
-   * index.html 원본 패턴: 질문 클릭 시 채팅 영역이 통째로 새 답변으로 교체됨.
-   * 따라서 누적 표시가 아니라 매번 fresh 한 단일 Q&A 만 표시.
-   */
   const fireQuestion = useCallback(
-    (idx: number) => {
-      const question = questionsQuery.data?.[idx];
-      if (!question) return;
-      if (!sessionId || !customerId || !productCode) return;
-
-      // 이전 스트림 진행 중이면 즉시 중단 (스트리밍 중 다른 카드 클릭 대응)
-      abortRef.current?.abort();
-      abortRef.current = null;
-
-      // 채팅 초기화 → 새 Q&A 만 보이도록
+    async (idx: number) => {
+      const q = questionsQuery.data?.questions?.[idx];
+      if (!q || !productCode) return;
       clearMessages();
       setActiveIdx(idx);
-      // 자동 발사 가드 — 사용자 클릭으로도 가드를 마킹해 두면 useEffect 재발사 차단
       autoFiredRef.current = sessionId;
 
-      appendUserMessage(question.question);
+      appendUserMessage(q.text);
       startAssistantMessage();
 
-      const controller = streamChat(
-        '/api/chat/question',
-        {
-          session_id: sessionId,
-          customer_id: customerId,
-          product_code: productCode,
-          question_id: question.question_id,
-        },
-        {
-          onDelta: appendAssistantDelta,
-          onComplete: finishStreaming,
-          onError: (err) => {
-            finishStreaming();
-            toast.show(err.message === 'TIMEOUT' ? 'MSG-ERR-04' : 'MSG-ERR-03');
-          },
-        },
-      );
-      abortRef.current = controller;
+      try {
+        const result = await answerMutation.mutateAsync({
+          product: productCode,
+          qid: q.qid,
+          text: q.text,
+          trigger_indicators: q.trigger_indicators,
+          related_groups_internal: q.related_groups_internal,
+        });
+        const ans = result.answer;
+        appendAssistantDelta(`${ans.briefing}\n\n— 응대 스크립트 —\n${ans.sales_rep_script}`);
+      } catch {
+        toast.show('MSG-ERR-03');
+      } finally {
+        finishStreaming();
+      }
     },
     [
       questionsQuery.data,
-      sessionId,
-      customerId,
       productCode,
+      sessionId,
       clearMessages,
       appendUserMessage,
       startAssistantMessage,
       appendAssistantDelta,
       finishStreaming,
+      answerMutation,
     ],
   );
 
-  /** 컴포넌트 unmount / 고객사 변경 시 진행 중 스트림 정리 */
-  useEffect(() => {
-    return () => {
-      abortRef.current?.abort();
-      abortRef.current = null;
-    };
-  }, [sessionId]);
-
-  /**
-   * 신규 세션 진입 시 첫 번째 질문 자동 발사
-   * - 세션 새로 시작될 때마다 (고객사/제품 변경 또는 최초 진입)
-   * - 채팅이 비어있고, 질문 데이터 준비되었을 때만
-   */
   useEffect(() => {
     if (!sessionId) return;
     if (autoFiredRef.current === sessionId) return;
-    if (!questionsQuery.data || questionsQuery.data.length === 0) return;
+    const list = questionsQuery.data?.questions;
+    if (!list || list.length === 0) return;
     if (messagesLen > 0) return;
-    if (!customerId || !productCode) return;
-
+    if (!productCode) return;
     autoFiredRef.current = sessionId;
     setActiveIdx(0);
-    fireQuestion(0);
-  }, [sessionId, questionsQuery.data, messagesLen, customerId, productCode, fireQuestion]);
+    void fireQuestion(0);
+  }, [sessionId, questionsQuery.data, messagesLen, productCode, fireQuestion]);
 
-  /** 세션 변경 시 active idx 0 으로 시각 리셋 (자동 발사 useEffect 가 이어서 처리) */
   useEffect(() => {
     setActiveIdx(0);
   }, [sessionId]);
+
+  const list = questionsQuery.data?.questions ?? [];
 
   return (
     <div>
@@ -143,13 +106,13 @@ export function QuestionsPanel() {
         </div>
       )}
 
-      {questionsQuery.data && (
+      {list.length > 0 && (
         <div className="space-y-2.5">
-          {questionsQuery.data.map((q, idx) => (
+          {list.map((q, idx) => (
             <motion.button
-              key={q.question_id}
+              key={q.qid}
               whileTap={{ scale: 0.99 }}
-              onClick={() => fireQuestion(idx)}
+              onClick={() => void fireQuestion(idx)}
               aria-pressed={activeIdx === idx}
               className={cn(
                 'flex w-full items-start gap-3 rounded-xl p-4 text-left transition-colors',
@@ -165,7 +128,7 @@ export function QuestionsPanel() {
                 {idx + 1}
               </div>
               <p className="flex-1 text-sm font-semibold leading-snug tracking-tight text-gray-800">
-                {q.question}
+                {q.text}
               </p>
             </motion.button>
           ))}

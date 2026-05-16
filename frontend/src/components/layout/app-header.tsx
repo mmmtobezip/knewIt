@@ -7,7 +7,7 @@ import { APP, REFRESH } from '@/shared/constants';
 import { Select } from '@/components/ui/select';
 import { useSelectionStore } from '@/stores/selection-store';
 import { useChatStore } from '@/stores/chat-store';
-import { useInvalidateCache } from '@/lib/api/queries/dashboard';
+import { useCustomerProfile, useInvalidateCache } from '@/lib/api/queries/dashboard';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import { toast } from '@/stores/toast-store';
 import { formatTime } from '@/shared/utils/format';
@@ -30,9 +30,14 @@ export function AppHeader() {
   const { customerId, productCode, setCustomer, setProduct } = useSelectionStore();
   const startNewSession = useChatStore((s) => s.startNewSession);
   const invalidate = useInvalidateCache();
+  const profileQuery = useCustomerProfile(customerId);
 
-  // 셀렉터 옵션 (고정, index.html 매핑)
-  const productOptions = PRODUCTS.map((p) => ({ value: p.code, label: p.name }));
+  // PRD 0514 § 4.1: customer.product_group → 메인 대시보드 차트1 데이터 필터.
+  // 제품 드롭다운은 현재 고객사가 다루는 제품군만 표시 (1개면 단일 옵션).
+  const allowedProducts = profileQuery.data?.product_group ?? [];
+  const productOptions = PRODUCTS.filter(
+    (p) => allowedProducts.length === 0 || allowedProducts.includes(p.code),
+  ).map((p) => ({ value: p.code, label: p.name }));
   const customerOptions = CUSTOMERS.slice()
     .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
     .map((c) => ({ value: c.id, label: c.name }));
@@ -58,7 +63,7 @@ export function AppHeader() {
       {
         customer_id: customerId,
         product_code: productCode,
-        scope: ['analysis', 'causal_chain', 'news', 'strategy'],
+        scope: ['top_movers', 'cause_flow', 'interpretation', 'strategy', 'news'],
       },
       {
         onSuccess: () => toast.show('MSG-TST-01', { time: formatTime() }),

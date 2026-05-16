@@ -2,27 +2,22 @@
 
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { TOKENS } from '@/styles/tokens';
-import { formatDate, formatInt } from '@/shared/utils/format';
-import type { IndicatorTimeseries } from '@/types';
+import { formatDate } from '@/shared/utils/format';
+import type { IndicatorPoint } from '@/types';
 
 interface PriceChartProps {
-  data: IndicatorTimeseries['series'];
+  data: IndicatorPoint[];
+  unit?: string;
 }
 
 /**
- * 가격 차트 (Recharts AreaChart)
- *
- * Toss 스타일:
- * - Line color: Toss Blue
- * - Area fill: Toss Blue 8% opacity
- * - Tooltip: 호버 시 날짜 + 가격 표시
- * - X축 6개 ticks (자동 분배)
+ * 가격 차트 (Recharts AreaChart) — PRD 0514 차트1 시계열.
  */
-export function PriceChart({ data }: PriceChartProps) {
+export function PriceChart({ data, unit }: PriceChartProps) {
   const xTickFormatter = (value: string): string => {
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return value;
-    return `${d.getMonth() + 1}/${d.getDate()}`;
+    return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
   };
 
   return (
@@ -47,7 +42,8 @@ export function PriceChart({ data }: PriceChartProps) {
             tick={{ fill: TOKENS.color.gray[400], fontSize: 11 }}
             axisLine={false}
             tickLine={false}
-            width={40}
+            width={48}
+            domain={['auto', 'auto']}
           />
           <Tooltip
             cursor={{ stroke: TOKENS.color.gray[300], strokeDasharray: '3 3' }}
@@ -61,7 +57,7 @@ export function PriceChart({ data }: PriceChartProps) {
               fontWeight: 600,
             }}
             labelFormatter={(label) => formatDate(String(label))}
-            formatter={(value: number) => [`$${formatInt(value)}`, '가격']}
+            formatter={(value: number) => [`${value.toLocaleString()} ${unit ?? ''}`, '값']}
           />
           <Area
             type="monotone"

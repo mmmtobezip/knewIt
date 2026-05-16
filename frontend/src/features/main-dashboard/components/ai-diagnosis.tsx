@@ -4,78 +4,74 @@ import { TriangleAlert } from 'lucide-react';
 import { Card, CardTitle, CardSubtitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
-import { useSelectionStore } from '@/stores/selection-store';
-import { useTriggerEvent, useAnalysis } from '@/lib/api/queries/dashboard';
-import { Button } from '@/components/ui/button';
+import type { Interpretation } from '@/types';
+import { cn } from '@/shared/utils/cn';
 
 /**
- * AI 진단 카드 (AREA-MAIN-08)
+ * AI 진단 (PRD 0514) — WHAT / WHY / IMPACT.
  *
- * - DIA-02 WHAT: 빨강 배경 (#FEF1F2), 단문
- * - DIA-03 WHY: 노랑 배경 (#FFF8E5), 불릿 리스트
- * - DIA-04 IMPACT: 초록 배경 (#E8FAF3), 불릿 리스트
- *
- * 데이터 소스: analysis_result (LLM 생성)
+ * impact 는 객체 배열 ({risk_factor, direction, reason}).
+ *  - 증폭: 빨강 / 완화: 파랑 / 중립: 회색
  */
-export function AiDiagnosis() {
-  const { productCode } = useSelectionStore();
-  const triggerQuery = useTriggerEvent(productCode, new Date().toISOString().slice(0, 10));
-  const analysisQuery = useAnalysis(triggerQuery.data?.event_id ?? null);
+interface AiDiagnosisProps {
+  interpretation: Interpretation | null;
+  isLoading?: boolean;
+}
 
+const DIRECTION_COLORS: Record<string, string> = {
+  증폭: 'bg-red-50 text-red-700 border-red-200',
+  완화: 'bg-blue-50 text-blue-700 border-blue-200',
+  중립: 'bg-gray-50 text-gray-700 border-gray-200',
+};
+
+export function AiDiagnosis({ interpretation, isLoading }: AiDiagnosisProps) {
   return (
-    <Card>
+    <Card className="flex flex-col">
       <CardTitle>
         <TriangleAlert className="h-5 w-5 text-danger" />
         AI 진단 <CardSubtitle>(무슨 일이 일어나고 있는가?)</CardSubtitle>
       </CardTitle>
 
-      {analysisQuery.isLoading ? (
-        <div className="mt-4 grid grid-cols-3 gap-3">
-          <Skeleton className="h-32" />
-          <Skeleton className="h-32" />
-          <Skeleton className="h-32" />
+      {isLoading ? (
+        <div className="mt-4 flex flex-1 flex-col gap-3">
+          <Skeleton className="flex-1" />
+          <Skeleton className="flex-1" />
+          <Skeleton className="flex-1" />
         </div>
-      ) : analysisQuery.isError ? (
-        <EmptyState
-          icon="⚠️"
-          title="분석 데이터를 불러오지 못했습니다."
-          action={
-            <Button variant="secondary" size="sm" onClick={() => analysisQuery.refetch()}>
-              다시 시도
-            </Button>
-          }
-        />
-      ) : !analysisQuery.data ? (
-        <EmptyState icon="🤖" title="분석 데이터 없음" description="trigger_event 발생 시 표시됩니다." />
+      ) : !interpretation ? (
+        <div className="flex flex-1 items-center">
+          <EmptyState icon="🤖" title="분석 데이터 없음" description="대시보드 응답을 받으면 표시됩니다." />
+        </div>
       ) : (
-        <div className="mt-4 grid grid-cols-3 gap-3">
+        <div className="mt-4 flex flex-1 flex-col gap-3">
           <DiagCard label="WHAT" color="text-danger" bgClass="bg-diag-what">
-            <p className="whitespace-pre-line text-[13px] font-medium leading-relaxed tracking-tight text-gray-800">
-              {analysisQuery.data.what}
+            <p className="text-[13px] font-medium leading-relaxed tracking-tight text-gray-800">
+              {interpretation.what}
             </p>
           </DiagCard>
 
           <DiagCard label="WHY" color="text-[#D97706]" bgClass="bg-diag-why">
-            <ul className="list-none space-y-1.5">
-              {analysisQuery.data.why.map((item, idx) => (
-                <li
-                  key={idx}
-                  className="relative pl-3 text-[13px] font-medium leading-relaxed tracking-tight text-gray-800 before:absolute before:left-0 before:text-gray-500 before:content-['•']"
-                >
-                  {item}
-                </li>
-              ))}
-            </ul>
+            <p className="whitespace-pre-line text-[13px] font-medium leading-relaxed tracking-tight text-gray-800">
+              {interpretation.why}
+            </p>
           </DiagCard>
 
-          <DiagCard label="IMPACT" color="text-[#00A878]" bgClass="bg-diag-impact">
-            <ul className="list-none space-y-1.5">
-              {analysisQuery.data.impact.map((item, idx) => (
-                <li
-                  key={idx}
-                  className="relative pl-3 text-[13px] font-medium leading-relaxed tracking-tight text-gray-800 before:absolute before:left-0 before:text-gray-500 before:content-['•']"
-                >
-                  {item}
+          <DiagCard label="IMPACT" color="text-[#00A878]" bgClass="bg-diag-impact" stretch>
+            <ul className="space-y-2">
+              {interpretation.impact.map((item, idx) => (
+                <li key={idx} className="text-[13px] leading-relaxed text-gray-800">
+                  <div className="mb-1 flex items-center gap-2">
+                    <span className="font-semibold text-gray-900">{item.risk_factor}</span>
+                    <span
+                      className={cn(
+                        'rounded-full border px-2 py-0.5 text-[11px] font-bold',
+                        DIRECTION_COLORS[item.direction] ?? DIRECTION_COLORS['중립'],
+                      )}
+                    >
+                      {item.direction}
+                    </span>
+                  </div>
+                  <div className="text-[12px] font-medium text-gray-700">{item.reason}</div>
                 </li>
               ))}
             </ul>
@@ -91,11 +87,13 @@ interface DiagCardProps {
   color: string;
   bgClass: string;
   children: React.ReactNode;
+  /** true 면 부모 flex-col 안에서 남는 공간을 모두 차지. */
+  stretch?: boolean;
 }
 
-function DiagCard({ label, color, bgClass, children }: DiagCardProps) {
+function DiagCard({ label, color, bgClass, children, stretch }: DiagCardProps) {
   return (
-    <div className={`rounded-2xl p-[18px] ${bgClass}`}>
+    <div className={cn('rounded-2xl p-[18px]', bgClass, stretch && 'flex-1')}>
       <div className={`mb-2.5 text-xs font-extrabold tracking-wide ${color}`}>{label}</div>
       {children}
     </div>
