@@ -1,0 +1,215 @@
+"""PRD 0514 — 통합 메인 대시보드 endpoint.
+
+GET /api/dashboard?customer={id}
+  → chart1_top_movers + chart2_cause_flow + interpretation + strategy 일괄 반환
+
+5개 캐시 scope(top_movers / cause_flow / interpretation / strategy / news) 각각 24h.
+"""
+from __future__ import annotations
+
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import get_settings
+from app.core.auth import get_current_user
+from app.core.errors import ApiException, ErrorCode
+from app.core.response import ApiSuccess, ok
+from app.db import get_db
+from app.models import CustomerProfile as CustomerProfileORM
+from app.models import Product as ProductORM
+from app.schemas.api import (
+    CacheScope,
+    DashboardData,
+    TopMoversData,
+)
+from app.schemas.domain import (
+    CauseFlowStep,
+    CustomerProfile,
+    Interpretation,
+    SessionUser,
+    Strategy,
+    TopMover,
+)
+from app.services.authorization import assert_customer_access
+from app.services.cache_service import get_or_compute, make_key
+from app.services.indicator_service import _axis_of, fetch_indicator, top_movers_for_product
+from app.services.llm_service import get_llm_service
+from app.services.news_service import get_news_service, query_for_indicator
+
+router = APIRouter(prefix="/api", tags=["dashboard"])
+SETTINGS = get_settings()
+KST = ZoneInfo(SETTINGS.app_timezone)
+
+
+class _NewsListWrap(BaseModel):
+    items: list[dict]
+
+
+class _TopMoversWrap(BaseModel):
+    product: str
+    top_movers: list[TopMover]
+    top_feature: str
+
+
+async def _load_dashboard_context(
+    db: AsyncSession, user: SessionUser, customer_id: str
+) -> tuple[CustomerProfile, str]:
+    await assert_customer_access(db, user, customer_id)
+    row = await db.get(CustomerProfileORM, customer_id)
+    if row is None:
+        raise ApiException(ErrorCode.DATA_001, detail=f"customer={customer_id} 없음")
+    profile = CustomerProfile.model_validate(row)
+    product_groups = profile.product_group or []
+    if not product_groups:
+        raise ApiException(ErrorCode.DATA_001, detail="customer 의 product_group 비어있음")
+    return profile, product_groups[0]
+
+
+async def _resolve_top_movers(
+    db: AsyncSession, customer_id: str, product: str
+) -> _TopMoversWrap:
+    async def compute() -> _TopMoversWrap:
+        movers, top_feature = await top_movers_for_product(db, product, top_n=3)
+        return _TopMoversWrap(product=product, top_movers=movers, top_feature=top_feature)
+
+    key = make_key(CacheScope.TOP_MOVERS, customer_id, product, "_")
+    result, _ = await get_or_compute(key, _TopMoversWrap, compute)
+    return result
+
+
+async def _resolve_news(
+    customer_id: str, product: str, top_feature: str
+) -> _NewsListWrap:
+    key = make_key(CacheScope.NEWS, customer_id, product, top_feature)
+
+    async def compute() -> _NewsListWrap:
+        ko_q, en_q = query_for_indicator(top_feature, product)
+        docs = await get_news_service().search(ko_q, en_q)
+        return _NewsListWrap(items=[d.model_dump() for d in docs])
+
+    result, _ = await get_or_compute(key, _NewsListWrap, compute)
+    return result
+
+
+@router.get(
+    "/dashboard",
+    response_model=ApiSuccess[DashboardData],
+    summary="PRD 0514 메인 대시보드 통합 응답 (차트1+차트2+해석+전략)",
+)
+async def get_dashboard(
+    customer: str = Query(..., description="customer_id"),
+    user: SessionUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ApiSuccess[DashboardData]:
+    profile, product = await _load_dashboard_context(db, user, customer)
+    movers_wrap = await _resolve_top_movers(db, customer, product)
+    if not movers_wrap.top_movers:
+        raise ApiException(ErrorCode.DATA_001, detail=f"product={product} 지표 없음")
+
+    top = movers_wrap.top_movers[0]
+    news_wrap = await _resolve_news(customer, product, top.indicator)
+
+    # PRD § 5.3.1 — 동일 axis 그룹 내 인접 지표를 LLM 컨텍스트로 추가
+    product_orm = await db.get(ProductORM, product)
+    axis_def = (product_orm.axis if product_orm else None) or {}
+    top_axis = _axis_of(top.indicator, axis_def)
+    adjacent: list[dict] = []
+    if top_axis:
+        for ind in axis_def.get(top_axis, {}).get("indicators", []):
+            if ind == top.indicator:
+                continue
+            snap = await fetch_indicator(db, ind, period_days=30)
+            if snap is None:
+                continue
+            adjacent.append(
+                {
+                    "indicator": ind,
+                    "value": snap.latest_value,
+                    "unit": snap.unit,
+                    "change_w1": snap.change_w1,
+                }
+            )
+
+    llm = get_llm_service()
+    flow_key = make_key(CacheScope.CAUSE_FLOW, customer, product, top.indicator)
+
+    async def _compute_flow() -> _FlowWrap:
+        steps = await llm.generate_cause_flow(
+            indicator_name=top.indicator,
+            change_rate=top.change_w1,
+            period="W-1",
+            news=news_wrap.items,
+            adjacent_indicators=adjacent,
+            axis_name=top_axis,
+        )
+        return _FlowWrap(steps=steps)
+
+    flow_wrap, _ = await get_or_compute(flow_key, _FlowWrap, _compute_flow)
+
+    interp_key = make_key(CacheScope.INTERPRETATION, customer, product, top.indicator)
+    flow_text = " → ".join(s.node for s in flow_wrap.steps)
+
+    async def _compute_interp() -> Interpretation:
+        return await llm.generate_interpretation(
+            customer=customer,
+            industry=profile.industry,
+            market_region=profile.market_region,
+            risk_factors=profile.risk_factors,
+            indicator=top.indicator,
+            change_rate=top.change_w1,
+            period="W-1",
+            flow_text=flow_text,
+        )
+
+    interp, _ = await get_or_compute(interp_key, Interpretation, _compute_interp)
+
+    strat_key = make_key(CacheScope.STRATEGY, customer, product, top.indicator)
+
+    async def _compute_strat() -> Strategy:
+        return await llm.generate_strategy(
+            customer=customer,
+            industry=profile.industry,
+            market_region=profile.market_region,
+            sensitive_topics=profile.sensitive_topics,
+            risk_factors=profile.risk_factors,
+            indicator=top.indicator,
+            change_rate=top.change_w1,
+            impact=[item.model_dump() for item in interp.impact],
+        )
+
+    strat, _ = await get_or_compute(strat_key, Strategy, _compute_strat)
+
+    return ok(
+        DashboardData(
+            customer=customer,
+            product=product,
+            generated_at=datetime.now(KST).isoformat(),
+            chart1_top_movers=movers_wrap.top_movers,
+            chart2_cause_flow=flow_wrap.steps,
+            interpretation=interp,
+            strategy=strat,
+        )
+    )
+
+
+@router.get(
+    "/top-movers",
+    response_model=ApiSuccess[TopMoversData],
+    summary="차트1 Top Mover 단독 조회 (디버그/캐시 검증용)",
+)
+async def get_top_movers(
+    customer: str = Query(...),
+    user: SessionUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ApiSuccess[TopMoversData]:
+    _, product = await _load_dashboard_context(db, user, customer)
+    wrap = await _resolve_top_movers(db, customer, product)
+    return ok(TopMoversData(product=product, top_movers=wrap.top_movers))
+
+
+class _FlowWrap(BaseModel):
+    steps: list[CauseFlowStep]
