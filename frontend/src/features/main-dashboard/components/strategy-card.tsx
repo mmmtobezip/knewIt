@@ -4,20 +4,20 @@ import { MessageSquare, Shield, CheckCheck, Quote } from 'lucide-react';
 import { Card, CardTitle, CardSubtitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
-import { useSelectionStore } from '@/stores/selection-store';
-import { useStrategy } from '@/lib/api/queries/dashboard';
+import type { Strategy } from '@/types';
 
 /**
- * 권장 대응 전략 카드 (AREA-MAIN-09)
- *
- * - STR-02 전략 요약: 회색 배경, 🛡️
- * - STR-03 추천 행동: 번호 리스트, ✅
- * - STR-04 협상 포인트 + STR-05 인용 박스 (Toss Blue Bg, ❝❞)
+ * 권장 대응 전략 (PRD 0514).
+ *  - strategy_summary (톤 명시)
+ *  - recommended_actions Top 3 (행동 동사로 시작)
+ *  - negotiation_points Top 3 (판매담당자 멘트형)
  */
-export function StrategyCard() {
-  const { customerId } = useSelectionStore();
-  const strategyQuery = useStrategy(customerId);
+interface StrategyCardProps {
+  strategy: Strategy | null;
+  isLoading?: boolean;
+}
 
+export function StrategyCard({ strategy, isLoading }: StrategyCardProps) {
   return (
     <Card>
       <CardTitle>
@@ -25,51 +25,43 @@ export function StrategyCard() {
         권장 대응 전략 <CardSubtitle>(무엇을 할 것인가?)</CardSubtitle>
       </CardTitle>
 
-      {strategyQuery.isLoading ? (
-        <div className="mt-4 grid grid-cols-3 gap-3">
-          <Skeleton className="h-44" />
-          <Skeleton className="h-44" />
-          <Skeleton className="h-44" />
+      {isLoading ? (
+        <div className="mt-4 space-y-3">
+          <Skeleton className="h-24" />
+          <Skeleton className="h-32" />
+          <Skeleton className="h-32" />
         </div>
-      ) : !strategyQuery.data ? (
-        <EmptyState icon="💡" title="전략 생성 중" description="trigger_event 발생 시 표시됩니다." />
+      ) : !strategy ? (
+        <EmptyState icon="💡" title="전략 생성 중" description="대시보드 응답을 받으면 표시됩니다." />
       ) : (
-        <div className="mt-4 grid grid-cols-3 gap-3">
-          {/* 전략 요약 */}
-          <StratPanel
-            icon={<Shield className="h-4 w-4 text-gray-700" />}
-            label="전략 요약"
-          >
+        <div className="mt-4 space-y-3">
+          <StratPanel icon={<Shield className="h-4 w-4 text-gray-700" />} label="전략 요약">
             <p className="whitespace-pre-line text-[13px] font-medium leading-relaxed tracking-tight text-gray-700">
-              {strategyQuery.data.summary}
+              {strategy.strategy_summary}
             </p>
           </StratPanel>
 
-          {/* 추천 행동 */}
-          <StratPanel
-            icon={<CheckCheck className="h-4 w-4 text-success" />}
-            label="추천 행동"
-          >
+          <StratPanel icon={<CheckCheck className="h-4 w-4 text-success" />} label="추천 행동 Top 3">
             <ol className="ml-5 list-decimal space-y-1.5 text-[13px] font-medium leading-relaxed tracking-tight text-gray-700">
-              {strategyQuery.data.actions.map((action, idx) => (
+              {strategy.recommended_actions.map((action, idx) => (
                 <li key={idx}>{action}</li>
               ))}
             </ol>
           </StratPanel>
 
-          {/* 협상 포인트 + 인용 */}
-          <StratPanel
-            icon={<Quote className="h-4 w-4 text-toss-blue" />}
-            label="협상 포인트"
-          >
-            <p className="whitespace-pre-line text-[13px] font-medium leading-relaxed tracking-tight text-gray-700">
-              {strategyQuery.data.negotiation_point}
-            </p>
-            <div className="mt-2.5 rounded-lg bg-toss-blue-light px-3.5 py-3 text-[13px] font-semibold leading-snug tracking-tight text-toss-blue">
-              <span aria-hidden>❝ </span>
-              {strategyQuery.data.quote}
-              <span aria-hidden> ❞</span>
-            </div>
+          <StratPanel icon={<Quote className="h-4 w-4 text-toss-blue" />} label="협상 포인트 Top 3">
+            <ul className="space-y-2 text-[13px] font-medium leading-relaxed tracking-tight text-gray-700">
+              {strategy.negotiation_points.map((p, idx) => (
+                <li
+                  key={idx}
+                  className="rounded-lg bg-toss-blue-light px-3.5 py-2.5 text-[12.5px] font-semibold leading-snug text-toss-blue"
+                >
+                  <span aria-hidden>❝ </span>
+                  {p}
+                  <span aria-hidden> ❞</span>
+                </li>
+              ))}
+            </ul>
           </StratPanel>
         </div>
       )}

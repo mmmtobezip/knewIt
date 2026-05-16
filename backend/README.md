@@ -1,119 +1,191 @@
-# Backend - POS-Pricing Navigator
+# Backend — POS-Pricing Navigator (PRD 0514)
 
-Backend 서비스 작업 공간입니다. **현재는 placeholder 상태이며, 본격 구현 예정.**
-
----
-
-## 🎯 시작 전 필독 (순서대로)
-
-1. **[../docs/main-ipo.md](../docs/main-ipo.md)** ⭐
-   확정된 모든 결정사항(Q1~Q18) + API 11개 + 에러 코드 + 캐시 정책.
-   **이 문서 하나로 BE 구현 범위의 80% 가 정의되어 있습니다.**
-
-2. **[../docs/tech-stack.md](../docs/tech-stack.md)**
-   권장 스택 (Python + FastAPI 기반).
-
-3. **[../shared/types/](../shared/types/)**
-   FE/BE 공유 TypeScript 인터페이스. Pydantic 모델로 변환해서 사용.
-
-4. **[../frontend/src/lib/msw/mocks/data.ts](../frontend/src/lib/msw/mocks/data.ts)**
-   Mock 응답 데이터. **BE 가 반환해야 할 응답 형식을 그대로 따라하면 됩니다.**
+영업 협상 지원 AI 대시보드 백엔드.
+**FastAPI + PostgreSQL + Redis + Claude Haiku 4.5**.
 
 ---
 
-## 🛠 구현해야 할 것
+## 1. 사전 요구사항
 
-### REST API (9개)
-| API ID | Method | Endpoint |
-|--------|--------|----------|
-| API-01 | GET | `/api/customers/{id}/profile` |
-| API-02 | GET | `/api/trigger-events?customer&product&date` |
-| API-03 | GET | `/api/today-questions?customer` |
-| API-04 | GET | `/api/indicators?product&period` |
-| API-05 | GET | `/api/analysis?event_id` |
-| API-06 | GET | `/api/causal-chain?event_id` |
-| API-07 | GET | `/api/news?event_id` |
-| API-08 | GET | `/api/strategy?customer_id` |
-| API-11 | POST | `/api/cache/invalidate` |
+| 요구 | 버전 |
+|---|---|
+| **Python** | 3.11+ (코드에서 사용. 3.13 권장) |
+| **uv** | 최신 (Astral) |
+| **PostgreSQL 16** | Docker 또는 네이티브 |
+| **Redis 7** | Docker 또는 네이티브 |
+| **Anthropic API Key** | |
+| (선택) Naver / NewsAPI 키 | 뉴스 수집용 |
 
-### SSE 스트리밍 (2개)
-| API ID | Method | Endpoint | 용도 |
-|--------|--------|----------|------|
-| API-09 | POST | `/api/chat` (SSE) | 자유 질문 채팅 |
-| API-10 | POST | `/api/chat/question` (SSE) | 추천 질문 답변 |
+## 2. PostgreSQL / Redis 가동 — 4가지 옵션 중 택1
 
-상세: [../docs/main-ipo.md](../docs/main-ipo.md) § 3-6
+### 옵션 A. Docker 호환 런타임 (가장 빠름)
+백엔드 폴더에 포함된 `docker-compose.yml` 사용.
 
-### 일일 배치 (P-09)
-- 매일 **06:00 Asia/Seoul** cron
-- MIH CSV 적재 → trigger_event 탐지 → LLM 분석 사전 생성 → today_questions 생성
-- 상세: [../docs/main-ipo.md](../docs/main-ipo.md) § 2-10
+| 플랫폼 | 권장 런타임 |
+|---|---|
+| macOS | **OrbStack** (https://orbstack.dev/) — 가볍고 빠름 |
+| macOS | **Docker Desktop** (https://www.docker.com/products/docker-desktop) |
+| Windows | **Docker Desktop** |
 
-### MCP-News 서버 (자체 구현)
-- Anthropic MCP Python SDK 사용
-- 뉴스 소스: Reuters/Bloomberg/Mysteel/CRU/FT 등
-- 별도 스펙 문서 작성 필요
-
----
-
-## 🗄️ 저장소 구성 (확정)
-
-| 데이터 | 저장소 | 비고 |
-|--------|--------|------|
-| 지표 CSV | 로컬 FS (`/data/indicators/YYYY-MM-DD.csv`) | MIH 자동 수집 |
-| `customer_profile`, `trigger_events`, `users`, `assigned_customers` | PostgreSQL | 영속 |
-| `analysis_result`, `causal_chain`, `strategy`, `news`, `today_questions` | Redis (TTL 24h) | 캐시 |
-| `chat_session` | Redis (TTL 30분) | 휘발성 |
-
----
-
-## 🌐 API 응답 표준
-
-모든 API 는 다음 wrapper 형식으로 응답:
-
-**성공**
-```json
-{
-  "success": true,
-  "data": { ... },
-  "error": null,
-  "meta": { "request_id": "...", "timestamp": "...", "cache_hit": true }
-}
+설치 후:
+```bash
+cd backend
+docker compose up -d
+docker compose ps   # postgres / redis 가 healthy 인지 확인
 ```
 
-**실패**
-```json
-{
-  "success": false,
-  "data": null,
-  "error": { "code": "E_LLM_001", "message": "...", "detail": "..." },
-  "meta": { ... }
-}
+> **macOS 포트 5432 충돌 주의**: 호스트에 brew postgresql 등이 떠 있으면 **Docker는 호스트 포트 5433** 으로 매핑함 (`.env.example` 참조).
+
+### 옵션 B. 네이티브 설치 (Docker 없이) — macOS
+```bash
+brew install postgresql@16 redis
+brew services start postgresql@16
+brew services start redis
+
+# DB / role 생성
+createdb pos_pricing_navigator
+psql -d pos_pricing_navigator -c "CREATE ROLE pos LOGIN PASSWORD 'pos' SUPERUSER;"
+
+# .env 의 DATABASE_URL 을 5432 로 변경 (Docker 안 쓰는 경우)
+# postgresql+asyncpg://pos:pos@localhost:5432/pos_pricing_navigator
 ```
 
-에러 코드 체계: [../docs/main-ipo.md](../docs/main-ipo.md) § 3-7
+
+### 옵션 D. 클라우드 / 원격 DB
+`.env` 에 클라우드 DB URL 직접 지정. 코드 변경 불필요.
 
 ---
 
-## 🧪 권장 스택
+## 3. 환경변수 (`.env`)
 
-- **언어/프레임워크**: Python 3.11 + FastAPI
-- **DB**: PostgreSQL 16 + asyncpg + SQLAlchemy 2.x + Alembic
-- **캐시**: Redis 7
-- **검증**: Pydantic 2.x
-- **스케줄러**: APScheduler
-- **LLM**: Anthropic Python SDK (또는 사내 LLM)
-- **MCP**: Anthropic MCP Python SDK
+`backend/.env.example` 복사 후 채워 넣기:
+```bash
+cd backend
+cp .env.example .env
+# 그 후 ANTHROPIC_API_KEY, NAVER_CLIENT_ID/SECRET, NEWSAPI_KEY 설정
+```
 
-상세: [../docs/tech-stack.md](../docs/tech-stack.md)
+| 변수 | 설명 | 기본 |
+|---|---|---|
+| `DATABASE_URL` | `postgresql+asyncpg://pos:pos@localhost:5433/...` | Docker 매핑 5433 |
+| `REDIS_URL` | `redis://localhost:6379/0` | - |
+| `ANTHROPIC_API_KEY` | OAuth (Claude Max) 또는 API Key | **필수** |
+| `LLM_MODEL` | `claude-haiku-4-5-20251001` | - |
+| `NAVER_CLIENT_ID/SECRET` | 한글 뉴스 | (선택) |
+| `NEWSAPI_KEY` | 영문 뉴스 | (선택) |
+
+> 자세한 항목은 `.env.example` 참조.
 
 ---
 
-## ✅ FE 가 기대하는 동작 체크리스트
+## 4. 첫 실행 (5분)
 
-- [ ] HTTP 401 → FE 가 자동으로 /login 리다이렉트 처리 (인증 만료)
-- [ ] HTTP 403 → 권한 외 고객사 접근 차단
-- [ ] HTTP 429 → 새로고침 debounce / Rate limit
-- [ ] SSE 응답은 `data: {"delta":"..."}\n\n` 청크 + `data: [DONE]\n\n` 종료 마커
-- [ ] 캐시 무효화 (POST /api/cache/invalidate) 시 scope 별 Redis 삭제
-- [ ] 매니저 권한은 본인 + 직속 팀원의 assigned_customers UNION 으로 반환
+```bash
+# 1. 저장소 클론
+git clone git@github.com:mmmtobezip/knewIt.git
+cd knewIt/backend
+
+# 2. 의존성 설치
+uv sync                       # .venv/ 생성 + 패키지 설치
+
+# 3. 환경변수
+cp .env.example .env
+# (.env 편집해서 ANTHROPIC_API_KEY 입력)
+
+# 4. PG/Redis 가동 (옵션 A 기준)
+docker compose up -d
+
+# 5. DB 마이그레이션
+uv run alembic upgrade head
+
+# 6. 시드 데이터 (10 거래처 + 5 제품 + 3 유저)
+uv run python -m scripts.seed_customers
+
+# 7. 외부 지표 시계열 적재 (external.xlsx → indicators 2,072행)
+#    external.xlsx 가 backend/external.xlsx 에 존재해야 함 (별도 제공)
+uv run python -m scripts.seed_from_xlsx
+
+# 8. 서버 실행
+uv run uvicorn app.main:app --host 127.0.0.1 --port 3001 --reload
+```
+
+> 매번 `uv run` 접두어를 붙입니다 (활성화된 venv 자동 사용).
+
+---
+
+## 5. 동작 확인
+
+```bash
+# 헬스 체크
+curl http://127.0.0.1:3001/health
+# → {"success":true,"data":{"status":"ok","db":true,"redis":true}, ...}
+
+# Swagger UI
+open http://127.0.0.1:3001/docs
+
+# 통합 대시보드 (실 LLM 호출, 15~20초)
+curl -G -H "X-User-Id: emp_2026001" \
+  --data-urlencode "customer=Borcelik Celik Sanayii VE Ticaret AS" \
+  http://127.0.0.1:3001/api/dashboard | python3 -m json.tool
+
+# 추천 질문
+curl -G -H "X-User-Id: emp_2026001" \
+  --data-urlencode "product=HR(고로밀)" \
+  http://127.0.0.1:3001/api/today-questions | python3 -m json.tool
+```
+
+| 사용자 ID | 권한 | 담당 거래처 |
+|---|---|---|
+| `emp_2026001` | sales | 10개 전체 (현 시드) |
+| `emp_2026002` | manager | (BACKLOG #10) |
+| `emp_2026099` | admin | 전체 |
+
+---
+
+## 6. 프론트엔드 연동
+
+`frontend/.env.local` 생성:
+```bash
+NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
+NEXT_PUBLIC_API_MOCKING=disabled
+NEXT_PUBLIC_DEFAULT_USER_ROLE=sales
+```
+
+그 후:
+```bash
+cd frontend
+npm install
+npm run dev      # http://localhost:3000
+```
+
+---
+
+## 7. API 요약
+
+| Method | Path | 용도 |
+|---|---|---|
+| GET | `/api/customers/{id}/profile` | 거래처 프로필 |
+| GET | `/api/dashboard?customer=...` | **통합** (차트1 + 차트2 + 해석 + 전략) |
+| GET | `/api/top-movers?customer=...` | 차트1 단독 (디버그) |
+| GET | `/api/today-questions?product=...` | 추천 질문 3개 |
+| POST | `/api/today-questions/answer` | 추천 질문 클릭 답변 (JSON) |
+| POST | `/api/cache/invalidate` | 새로고침 (5초 debounce) |
+| GET | `/health` | DB + Redis ping |
+
+상세: `http://127.0.0.1:3001/docs` (Swagger UI)
+
+---
+
+## 8. 트러블슈팅
+
+### Q. `psql ... role "pos" does not exist`
+- 호스트 PostgreSQL 과 Docker 컨테이너 둘 다 5432 점유 → Docker 호스트 매핑이 5433 으로 자동 변경됨
+- `.env` 의 `DATABASE_URL` 포트 확인 (5432 vs 5433)
+- 또는 호스트 PG 정지: `brew services stop postgresql@16`
+
+
+### Q. `/api/dashboard` 가 `product=선재 지표 없음` 404
+- BACKLOG #9 (`docs/BACKLOG.md` 참조) — "선재" PRODUCT_CONFIG 미정의
+- 현재 6개 거래처 (고려제강, Nissan, New Best Wire, JFE Techno Wire, 동일제강, Ningbo Dafeng) 영향
+- 임시: 다른 4개 거래처 (Borcelik, Berg Steel, 썬시멘트, 세아씨엠) 로 검증
+
