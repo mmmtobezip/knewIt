@@ -1,6 +1,6 @@
 # Backend — POS-Pricing Navigator (PRD 0514)
 
-POSCO 영업 협상 지원 AI 대시보드 백엔드.
+영업 협상 지원 AI 대시보드 백엔드.
 **FastAPI + PostgreSQL + Redis + Claude Haiku 4.5**.
 
 ---
@@ -13,7 +13,7 @@ POSCO 영업 협상 지원 AI 대시보드 백엔드.
 | **uv** | 최신 (Astral) |
 | **PostgreSQL 16** | Docker 또는 네이티브 |
 | **Redis 7** | Docker 또는 네이티브 |
-| **Anthropic API Key** | OAuth(`sk-ant-oat...`) 또는 API Key(`sk-ant-api...`) |
+| **Anthropic API Key** | |
 | (선택) Naver / NewsAPI 키 | 뉴스 수집용 |
 
 ## 2. PostgreSQL / Redis 가동 — 4가지 옵션 중 택1
@@ -25,9 +25,7 @@ POSCO 영업 협상 지원 AI 대시보드 백엔드.
 |---|---|
 | macOS | **OrbStack** (https://orbstack.dev/) — 가볍고 빠름 |
 | macOS | **Docker Desktop** (https://www.docker.com/products/docker-desktop) |
-| macOS | **Colima** — `brew install colima && colima start` |
 | Windows | **Docker Desktop** |
-| Linux | 네이티브 Docker Engine — `apt install docker.io` 또는 https://docs.docker.com/engine/install/ |
 
 설치 후:
 ```bash
@@ -52,14 +50,6 @@ psql -d pos_pricing_navigator -c "CREATE ROLE pos LOGIN PASSWORD 'pos' SUPERUSER
 # postgresql+asyncpg://pos:pos@localhost:5432/pos_pricing_navigator
 ```
 
-### 옵션 C. 네이티브 설치 — Linux
-```bash
-sudo apt install postgresql-16 redis-server
-sudo systemctl start postgresql redis-server
-
-sudo -u postgres psql -c "CREATE USER pos WITH PASSWORD 'pos' SUPERUSER;"
-sudo -u postgres createdb -O pos pos_pricing_navigator
-```
 
 ### 옵션 D. 클라우드 / 원격 DB
 `.env` 에 클라우드 DB URL 직접 지정. 코드 변경 불필요.
@@ -193,28 +183,9 @@ npm run dev      # http://localhost:3000
 - `.env` 의 `DATABASE_URL` 포트 확인 (5432 vs 5433)
 - 또는 호스트 PG 정지: `brew services stop postgresql@16`
 
-### Q. `ANTHROPIC_API_KEY 미설정`
-- shell 환경변수가 빈 값으로 export 되어 `.env` 를 가리는 경우:
-  ```bash
-  unset ANTHROPIC_API_KEY
-  ```
-- `~/.zshrc` 등 init 스크립트에 빈 export 가 있는지 확인
-
-### Q. Anthropic 401 `invalid x-api-key`
-- `sk-ant-oat...` (OAuth) vs `sk-ant-api...` (API Key) 자동 분기됨
-- Claude Max 구독자는 OAuth 토큰 그대로 사용 가능
-- 단, OAuth 토큰은 만료될 수 있음 → Claude Code 재로그인 후 새 토큰
-
-### Q. Docker compose 컨테이너가 `read-only file system` 에러
-- VM 디스크 손상. OrbStack/Docker Desktop 재시작 + Reclaim disk space
 
 ### Q. `/api/dashboard` 가 `product=선재 지표 없음` 404
 - BACKLOG #9 (`docs/BACKLOG.md` 참조) — "선재" PRODUCT_CONFIG 미정의
 - 현재 6개 거래처 (고려제강, Nissan, New Best Wire, JFE Techno Wire, 동일제강, Ningbo Dafeng) 영향
 - 임시: 다른 4개 거래처 (Borcelik, Berg Steel, 썬시멘트, 세아씨엠) 로 검증
 
----
-
-## 9. 잔여 작업
-
-`backend/docs/BACKLOG.md` 참조.
