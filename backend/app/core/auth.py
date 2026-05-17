@@ -50,4 +50,5 @@ async def get_current_user(
         user_id=row.user_id,
         user_role=UserRole(row.role.value),
         name=row.name,
+        primary_product_code=row.primary_product_code,
     )

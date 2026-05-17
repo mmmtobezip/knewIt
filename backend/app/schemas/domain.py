@@ -149,3 +149,26 @@ class SessionUser(BaseModel):
     user_id: str
     user_role: UserRole
     name: str | None = None
+    primary_product_code: str | None = None  # PRD 0516 — 담당자:제품 1:1 매핑
+
+
+class UserOut(_ORMModel):
+    """프로필 picker / /api/users 응답용 사용자 요약."""
+
+    user_id: str
+    name: str | None = None
+    role: UserRole
+    primary_product_code: str | None = None
+
+
+class UserMe(UserOut):
+    """현재 사용자 + 담당 거래처 수."""
+
+    assigned_customers_count: int
+
+
+class CustomerCatalogItem(_ORMModel):
+    customer_id: str
+    industry: str
+    market_region: str
+    product_group: list[str]

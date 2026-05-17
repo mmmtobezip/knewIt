@@ -1,7 +1,12 @@
-"""PRD 0514 — 통합 메인 대시보드 endpoint.
+"""PRD 0516 — 통합 메인 대시보드 endpoint.
 
-GET /api/dashboard?customer={id}
-  → chart1_top_movers + chart2_cause_flow + interpretation + strategy 일괄 반환
+GET /api/dashboard?customer={id}&product={code?}
+  → chart1_top_movers (Top 10) + chart2_cause_flow + interpretation + strategy 일괄 반환
+
+product 결정 우선순위:
+  1. query.product (지정 시, 단 customer.product_group 에 포함되어야 함)
+  2. user.primary_product_code (있고 customer 도 다루면)
+  3. customer.product_group[0] (fallback)
 
 5개 캐시 scope(top_movers / cause_flow / interpretation / strategy / news) 각각 24h.
 """
@@ -55,28 +60,51 @@ class _TopMoversWrap(BaseModel):
     top_feature: str
 
 
+def _select_product(
+    profile: CustomerProfile, user: SessionUser, query_product: str | None
+) -> str:
+    """PRD 0516 — product 결정 (query > user.primary > customer.product_group[0])."""
+    groups = profile.product_group or []
+    if query_product:
+        if query_product not in groups:
+            raise ApiException(
+                ErrorCode.PERM_001,
+                detail=f"customer={profile.customer_id} 가 product={query_product} 미취급",
+            )
+        return query_product
+    primary = user.primary_product_code
+    if primary and primary in groups:
+        return primary
+    if not groups:
+        raise ApiException(ErrorCode.DATA_001, detail="customer 의 product_group 비어있음")
+    return groups[0]
+
+
 async def _load_dashboard_context(
-    db: AsyncSession, user: SessionUser, customer_id: str
+    db: AsyncSession,
+    user: SessionUser,
+    customer_id: str,
+    query_product: str | None = None,
 ) -> tuple[CustomerProfile, str]:
     await assert_customer_access(db, user, customer_id)
     row = await db.get(CustomerProfileORM, customer_id)
     if row is None:
         raise ApiException(ErrorCode.DATA_001, detail=f"customer={customer_id} 없음")
     profile = CustomerProfile.model_validate(row)
-    product_groups = profile.product_group or []
-    if not product_groups:
-        raise ApiException(ErrorCode.DATA_001, detail="customer 의 product_group 비어있음")
-    return profile, product_groups[0]
+    product = _select_product(profile, user, query_product)
+    return profile, product
 
 
 async def _resolve_top_movers(
-    db: AsyncSession, customer_id: str, product: str
+    db: AsyncSession, customer_id: str, product: str, *, top_n: int = 10
 ) -> _TopMoversWrap:
+    """PRD 0516 — 차트1 Top-N (기본 10개, 회의록 "keyfeature 모두 표시")."""
+
     async def compute() -> _TopMoversWrap:
-        movers, top_feature = await top_movers_for_product(db, product, top_n=3)
+        movers, top_feature = await top_movers_for_product(db, product, top_n=top_n)
         return _TopMoversWrap(product=product, top_movers=movers, top_feature=top_feature)
 
-    key = make_key(CacheScope.TOP_MOVERS, customer_id, product, "_")
+    key = make_key(CacheScope.TOP_MOVERS, customer_id, product, f"n{top_n}")
     result, _ = await get_or_compute(key, _TopMoversWrap, compute)
     return result
 
@@ -102,10 +130,14 @@ async def _resolve_news(
 )
 async def get_dashboard(
     customer: str = Query(..., description="customer_id"),
+    product: str | None = Query(
+        default=None,
+        description="customer.product_group 내 제품 코드 (옵셔널, 미지정 시 user.primary 또는 group[0])",
+    ),
     user: SessionUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ApiSuccess[DashboardData]:
-    profile, product = await _load_dashboard_context(db, user, customer)
+    profile, product = await _load_dashboard_context(db, user, customer, product)
     movers_wrap = await _resolve_top_movers(db, customer, product)
     if not movers_wrap.top_movers:
         raise ApiException(ErrorCode.DATA_001, detail=f"product={product} 지표 없음")
@@ -213,12 +245,13 @@ async def get_dashboard(
 )
 async def get_top_movers(
     customer: str = Query(...),
+    product: str | None = Query(default=None),
     user: SessionUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ApiSuccess[TopMoversData]:
-    _, product = await _load_dashboard_context(db, user, customer)
-    wrap = await _resolve_top_movers(db, customer, product)
-    return ok(TopMoversData(product=product, top_movers=wrap.top_movers))
+    _, product_resolved = await _load_dashboard_context(db, user, customer, product)
+    wrap = await _resolve_top_movers(db, customer, product_resolved)
+    return ok(TopMoversData(product=product_resolved, top_movers=wrap.top_movers))
 
 
 class _FlowWrap(BaseModel):

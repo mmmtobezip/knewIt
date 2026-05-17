@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from app.schemas.domain import (
     CauseFlowStep,
+    CustomerCatalogItem,
     CustomerProfile,
     IndicatorSeries,
     Interpretation,
@@ -15,11 +16,30 @@ from app.schemas.domain import (
     Strategy,
     TodayQuestion,
     TopMover,
+    UserMe,
+    UserOut,
 )
 
 
 class CustomerProfileData(BaseModel):
     customer_profile: CustomerProfile
+
+
+class UsersListData(BaseModel):
+    users: list[UserOut]
+
+
+class UserMeData(BaseModel):
+    user: UserMe
+
+
+class ProductsCatalogData(BaseModel):
+    products: list[str]
+
+
+class CustomersCatalogData(BaseModel):
+    product: str | None = None
+    customers: list[CustomerCatalogItem]
 
 
 class ProductData(BaseModel):
