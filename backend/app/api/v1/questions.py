@@ -128,31 +128,26 @@ async def post_answer(
         if info:
             trigger_data.append(info)
 
-    # 같은 axis 그룹 내 지표 (연관)
-    axis_def = product.axis or {}
-    related_features: set[str] = set()
-    for group_name in body.related_groups_internal:
-        for ind in axis_def.get(group_name, {}).get("indicators", []):
-            if ind not in body.trigger_indicators:
-                related_features.add(ind)
+    # PRD 0516 — axis 폐기. 같은 product 의 importance Top-3 (trigger 제외) 사용.
+    triggers_set = set(body.trigger_indicators)
+    pairs = sorted(
+        zip(
+            product.key_features or [],
+            product.key_feature_importance or [],
+            strict=False,
+        ),
+        key=lambda x: x[1],
+        reverse=True,
+    )
     related_data: list[dict] = []
-    for f in related_features:
-        info = await _snapshot(f)
+    for feat, _imp in pairs:
+        if feat in triggers_set:
+            continue
+        info = await _snapshot(feat)
         if info:
             related_data.append(info)
-
-    # 인접 axis 그룹 (보조)
-    adjacent_features: set[str] = set()
-    for group_name, grp in axis_def.items():
-        if group_name in body.related_groups_internal:
-            continue
-        for ind in grp.get("indicators", [])[:1]:
-            adjacent_features.add(ind)
-    adjacent_data: list[dict] = []
-    for f in adjacent_features:
-        info = await _snapshot(f)
-        if info:
-            adjacent_data.append(info)
+        if len(related_data) >= 3:
+            break
 
     llm = get_llm_service()
     answer = await llm.generate_answer(
@@ -160,7 +155,7 @@ async def post_answer(
         question_text=body.text,
         trigger_indicators=trigger_data,
         related_indicators=related_data,
-        adjacent_indicators=adjacent_data,
+        adjacent_indicators=[],
     )
     return ok(QuestionAnswerData(answer=answer))
 

@@ -64,6 +64,7 @@ class TopMover(BaseModel):
     change_m1: float | None = None
     score: float
     series: list[IndicatorPointOut] = Field(default_factory=list)
+    cycle: str | None = None  # "D" / "W" / "M" (PRD 0516 — FE 기간 탭 매칭용)
 
 
 # ── Cause Flow (메인 대시보드 차트2) ───────────────────────

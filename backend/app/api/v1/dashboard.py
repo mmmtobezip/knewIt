@@ -36,7 +36,7 @@ from app.schemas.domain import (
 )
 from app.services.authorization import assert_customer_access
 from app.services.cache_service import get_or_compute, make_key
-from app.services.indicator_service import _axis_of, fetch_indicator, top_movers_for_product
+from app.services.indicator_service import fetch_indicator, top_movers_for_product
 from app.services.llm_service import get_llm_service
 from app.services.news_service import get_news_service, query_for_indicator
 
@@ -113,26 +113,36 @@ async def get_dashboard(
     top = movers_wrap.top_movers[0]
     news_wrap = await _resolve_news(customer, product, top.indicator)
 
-    # PRD § 5.3.1 — 동일 axis 그룹 내 인접 지표를 LLM 컨텍스트로 추가
+    # PRD 0516 — axis 폐기. 동일 product 의 key_feature_importance Top-3 (top.indicator 제외)
+    # 를 LLM cause_flow 컨텍스트로 전달.
     product_orm = await db.get(ProductORM, product)
-    axis_def = (product_orm.axis if product_orm else None) or {}
-    top_axis = _axis_of(top.indicator, axis_def)
     adjacent: list[dict] = []
-    if top_axis:
-        for ind in axis_def.get(top_axis, {}).get("indicators", []):
-            if ind == top.indicator:
+    if product_orm:
+        pairs = sorted(
+            zip(
+                product_orm.key_features or [],
+                product_orm.key_feature_importance or [],
+                strict=False,
+            ),
+            key=lambda x: x[1],
+            reverse=True,
+        )
+        for feat, _imp in pairs:
+            if feat == top.indicator:
                 continue
-            snap = await fetch_indicator(db, ind, period_days=30)
+            snap = await fetch_indicator(db, feat, period_days=30)
             if snap is None:
                 continue
             adjacent.append(
                 {
-                    "indicator": ind,
+                    "indicator": feat,
                     "value": snap.latest_value,
                     "unit": snap.unit,
                     "change_w1": snap.change_w1,
                 }
             )
+            if len(adjacent) >= 3:
+                break
 
     llm = get_llm_service()
     flow_key = make_key(CacheScope.CAUSE_FLOW, customer, product, top.indicator)
@@ -144,7 +154,7 @@ async def get_dashboard(
             period="W-1",
             news=news_wrap.items,
             adjacent_indicators=adjacent,
-            axis_name=top_axis,
+            axis_name=None,
         )
         return _FlowWrap(steps=steps)
 

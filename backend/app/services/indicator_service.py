@@ -86,34 +86,25 @@ async def fetch_series(
     return IndicatorSeries(feature_name=snap.feature_name, unit=snap.unit, points=snap.points)
 
 
-def _axis_of(feature: str, axis_def: dict) -> str | None:
-    """feature 가 속한 첫 번째 axis 반환 (multi-axis 가능하지만 첫 매칭만)."""
-    for axis_name, grp in axis_def.items():
-        if feature in grp.get("indicators", []):
-            return axis_name
-    return None
-
-
-axis_of = _axis_of  # public alias for routers
-
-
 async def top_movers_for_product(
     db: AsyncSession, product_code: str, *, top_n: int = 3
 ) -> tuple[list[TopMover], str]:
-    """PRD 0514 차트1.
+    """PRD 0516 차트1.
 
-    Score = |W-1 변동률| × importance, Top-N 추출 (서로 다른 axis 우선).
+    Score = |W-1 변동률| × key_feature_importance, score 내림차순 Top-N.
+    PRD 0516에서 axis 제거됨 → 단순 영향도 정렬.
     반환: (top_movers, feature_name_of_max_score)
     """
     product = await db.get(Product, product_code)
     if product is None:
         return [], ""
     importance = product.key_feature_importance or []
-    axis_def = product.axis or {}
+    cycles = product.key_feature_cycle or []
 
-    candidates: list[tuple[TopMover, str | None]] = []
+    candidates: list[TopMover] = []
     for idx, feature in enumerate(product.key_features or []):
         weight = importance[idx] if idx < len(importance) else 0.0
+        cycle = cycles[idx] if idx < len(cycles) else None
         snap = await fetch_indicator(db, feature, period_days=90)
         if snap is None:
             continue
@@ -127,28 +118,14 @@ async def top_movers_for_product(
             change_m1=snap.change_m1,
             score=score,
             series=snap.points,
+            cycle=cycle,
         )
-        candidates.append((mover, _axis_of(feature, axis_def)))
+        candidates.append(mover)
 
-    candidates.sort(key=lambda x: x[0].score, reverse=True)
-
-    # axis 다양성: top_n 까지 채우되 가능하면 서로 다른 axis
-    seen_axes: set[str] = set()
-    primary: list[TopMover] = []
-    backup: list[TopMover] = []
-    for mover, axis in candidates:
-        if len(primary) >= top_n:
-            break
-        if axis and axis not in seen_axes:
-            primary.append(mover)
-            seen_axes.add(axis)
-        else:
-            backup.append(mover)
-    while len(primary) < top_n and backup:
-        primary.append(backup.pop(0))
-
-    top_feature = primary[0].indicator if primary else ""
-    return primary, top_feature
+    candidates.sort(key=lambda m: m.score, reverse=True)
+    top = candidates[:top_n]
+    top_feature = top[0].indicator if top else ""
+    return top, top_feature
 
 
 __all__ = [
