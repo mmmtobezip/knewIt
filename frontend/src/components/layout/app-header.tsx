@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Bell, User, RefreshCw } from 'lucide-react';
+import { User, RefreshCw } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { APP, REFRESH } from '@/shared/constants';
 import { Select } from '@/components/ui/select';
@@ -121,12 +121,6 @@ export function AppHeader() {
         새로고침
       </motion.button>
 
-      <button
-        className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 transition-colors hover:bg-gray-200"
-        aria-label="알림"
-      >
-        <Bell className="h-4 w-4 text-gray-700" />
-      </button>
       <button
         className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 transition-colors hover:bg-gray-200"
         aria-label="프로필"

@@ -19,8 +19,6 @@ interface CauseFlowCardProps {
   isLoading?: boolean;
 }
 
-const STEP_ICONS = ['🏭', '📉', '🚢', '📊', '⚙️'];
-
 export function CauseFlowCard({ flow, isLoading }: CauseFlowCardProps) {
   const hasFlow = flow.length > 0;
 
@@ -48,25 +46,24 @@ export function CauseFlowCard({ flow, isLoading }: CauseFlowCardProps) {
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: idx * 0.08 }}
-                className="relative flex flex-col items-center justify-center rounded-xl bg-gray-100 p-4 px-2.5 text-center"
+                className="flex flex-col items-center"
               >
-                <div className="mb-2 text-[26px]" aria-hidden>
-                  {STEP_ICONS[idx] ?? '📌'}
+                <span className="flex w-full shrink-0 items-center justify-center rounded-t-lg bg-toss-blue px-2.5 py-1 text-[11px] font-extrabold tracking-wider text-white">
+                  STEP {idx + 1}
+                </span>
+                <div className="relative flex w-full flex-1 items-center justify-center rounded-b-lg bg-gray-100 px-3 py-4 text-center">
+                  <p className="text-[13px] font-semibold leading-snug tracking-tight text-gray-800">
+                    {step.node}
+                  </p>
+                  {idx < Math.min(flow.length, 5) - 1 && (
+                    <div
+                      className="absolute -right-2.5 top-1/2 z-10 -translate-y-1/2 text-sm font-bold text-toss-blue"
+                      aria-hidden
+                    >
+                      ▶
+                    </div>
+                  )}
                 </div>
-                <div className="mb-1.5 text-xs font-semibold leading-snug tracking-tight text-gray-800">
-                  {step.node}
-                </div>
-                {step.evidence.length > 0 && (
-                  <div className="text-[10px] text-gray-500">근거 {step.evidence.length}건</div>
-                )}
-                <div className="mt-1 text-sm text-danger" aria-hidden>
-                  ▼
-                </div>
-                {idx < Math.min(flow.length, 5) - 1 && (
-                  <div className="absolute -right-2.5 top-1/2 z-10 -translate-y-1/2 text-xs text-gray-400" aria-hidden>
-                    ▶
-                  </div>
-                )}
               </motion.div>
             ))}
           </div>

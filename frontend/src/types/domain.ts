@@ -34,6 +34,12 @@ export interface TopMover {
   change_m1: number | null;
   score: number;
   series: IndicatorPoint[];
+  /**
+   * 데이터 수집 주기 (예: 'D' 일별, 'W' 주별, 'M' 월별, 'Q' 분기, 'Y' 연별).
+   * BE Indicator 모델에는 존재하나 PRD 0514 응답에 아직 미포함 — optional 유지.
+   * docs/frontend-changes-affecting-backend.md 참조.
+   */
+  cycle?: string;
 }
 
 // ── Cause Flow (차트2) ───────────────────────────────────

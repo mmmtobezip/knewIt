@@ -1,6 +1,5 @@
 'use client';
 
-import { TriangleAlert } from 'lucide-react';
 import { Card, CardTitle, CardSubtitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -28,7 +27,6 @@ export function AiDiagnosis({ interpretation, isLoading }: AiDiagnosisProps) {
   return (
     <Card className="flex flex-col">
       <CardTitle>
-        <TriangleAlert className="h-5 w-5 text-danger" />
         AI 진단 <CardSubtitle>(무슨 일이 일어나고 있는가?)</CardSubtitle>
       </CardTitle>
 
@@ -43,7 +41,7 @@ export function AiDiagnosis({ interpretation, isLoading }: AiDiagnosisProps) {
           <EmptyState icon="🤖" title="분석 데이터 없음" description="대시보드 응답을 받으면 표시됩니다." />
         </div>
       ) : (
-        <div className="mt-4 flex flex-1 flex-col gap-3">
+        <div className="mt-4 flex flex-1 min-h-0 flex-col gap-3">
           <DiagCard label="WHAT" color="text-danger" bgClass="bg-diag-what">
             <p className="text-[13px] font-medium leading-relaxed tracking-tight text-gray-800">
               {interpretation.what}
@@ -56,7 +54,7 @@ export function AiDiagnosis({ interpretation, isLoading }: AiDiagnosisProps) {
             </p>
           </DiagCard>
 
-          <DiagCard label="IMPACT" color="text-[#00A878]" bgClass="bg-diag-impact" stretch>
+          <DiagCard label="IMPACT" color="text-[#00A878]" bgClass="bg-diag-impact">
             <ul className="space-y-2">
               {interpretation.impact.map((item, idx) => (
                 <li key={idx} className="text-[13px] leading-relaxed text-gray-800">
@@ -87,15 +85,24 @@ interface DiagCardProps {
   color: string;
   bgClass: string;
   children: React.ReactNode;
-  /** true 면 부모 flex-col 안에서 남는 공간을 모두 차지. */
-  stretch?: boolean;
 }
 
-function DiagCard({ label, color, bgClass, children, stretch }: DiagCardProps) {
+/**
+ * 진단 섹션 박스.
+ *
+ * `flex-auto` (= `flex: 1 1 auto`) — 자기 콘텐츠 크기를 기준으로 시작해서,
+ * 부모 flex-col 의 남는 공간을 비례로 채움. 결과:
+ *  - 콘텐츠가 적은 박스(WHAT 1줄)는 작게, 많은 박스(IMPACT 5항목)는 크게
+ *  - 카드 높이가 콘텐츠 합보다 크면 남는 공간을 비례 분배해 카드를 빈틈없이 채움
+ *  - 카드가 짧으면 박스들이 비례적으로 압축
+ */
+function DiagCard({ label, color, bgClass, children }: DiagCardProps) {
   return (
-    <div className={cn('rounded-2xl p-[18px]', bgClass, stretch && 'flex-1')}>
+    <div className={cn('flex flex-auto min-h-0 flex-col rounded-2xl p-[18px]', bgClass)}>
       <div className={`mb-2.5 text-xs font-extrabold tracking-wide ${color}`}>{label}</div>
-      {children}
+      <div className="flex min-h-0 flex-1 flex-col justify-center overflow-auto">
+        {children}
+      </div>
     </div>
   );
 }
