@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { BarChart3, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, CardTitle } from '@/components/ui/card';
 import { PriceChart } from '@/components/chart/price-chart';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -19,11 +19,23 @@ import { formatChangeRate, formatInt, getChangeTextClass } from '@/shared/utils/
  *   기본은 1M, 데이터가 부족하면 가용 최대 기간으로 자동 fallback
  * - Recharts AreaChart
  */
-const PERIODS = ['1D', '1W', '1M', '3M', '6M', '1Y', 'MAX'] as const;
+const CYCLE_LABEL: Record<string, string> = {
+  D: 'daily',
+  W: 'weekly',
+  M: 'monthly',
+  Q: 'quarterly',
+  Y: 'yearly',
+};
+
+function cycleLabel(cycle: string): string {
+  return CYCLE_LABEL[cycle.toUpperCase()] ?? cycle.toLowerCase();
+}
+
+const PERIODS = ['1D', '1M', '1Y'] as const;
 type PeriodKey = (typeof PERIODS)[number];
 
 const PERIOD_DAYS: Record<PeriodKey, number | null> = {
-  '1D': 1, '1W': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365, MAX: null,
+  '1D': 1, '1M': 30, '1Y': 365,
 };
 
 function sliceByPeriod(series: IndicatorPoint[], period: PeriodKey): IndicatorPoint[] {
@@ -46,17 +58,17 @@ export function PriceChartCard({ topMovers, isLoading }: PriceChartCardProps) {
   const active = topMovers[idx];
 
   // 인덱스 변경 시 활성 지표의 데이터 양에 따라 자동 period 선택.
-  // 1M에 5점 이상 있으면 1M, 부족하면 3M/6M/1Y/MAX 순서로 fallback.
+  // 1M에 5점 이상이면 1M, 부족하면 1Y로 fallback.
   useEffect(() => {
     if (!active) return;
-    const order: PeriodKey[] = ['1M', '3M', '6M', '1Y', 'MAX'];
+    const order: PeriodKey[] = ['1M', '1Y'];
     for (const p of order) {
       if (sliceByPeriod(active.series, p).length >= 5) {
         setPeriod(p);
         return;
       }
     }
-    setPeriod('MAX');
+    setPeriod('1Y');
   }, [active]);
 
   const series = useMemo(() => (active ? sliceByPeriod(active.series, period) : []), [active, period]);
@@ -75,22 +87,30 @@ export function PriceChartCard({ topMovers, isLoading }: PriceChartCardProps) {
   const canNext = idx < total - 1;
 
   return (
-    <Card>
-      <CardTitle>
-        <BarChart3 className="h-5 w-5 text-toss-blue" />
-        변동이 크게 발생한 지표 분석 결과
-      </CardTitle>
+    <Card className="flex flex-col">
+      <CardTitle>변동이 크게 발생한 지표 분석 결과</CardTitle>
 
       {isLoading ? (
         <ChartSkeleton />
       ) : !active ? (
         <EmptyState icon="📊" title="지표 데이터 없음" description="시계열 적재 후 표시됩니다." />
       ) : (
-        <>
+        <div className="flex flex-1 flex-col">
           <div className="mt-2 flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <div className="mb-1.5 truncate text-sm font-medium text-gray-600">
-                {active.indicator} ({active.unit})
+              <div className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-gray-600">
+                <span className="truncate">
+                  {active.indicator} ({active.unit})
+                </span>
+                {active.cycle && (
+                  <span
+                    className="inline-flex shrink-0 items-center rounded-md bg-gray-200 px-2 py-0.5 text-[11px] font-bold lowercase tracking-tight text-gray-700"
+                    title={`수집 주기: ${cycleLabel(active.cycle)}`}
+                    aria-label={`수집 주기 ${cycleLabel(active.cycle)}`}
+                  >
+                    {cycleLabel(active.cycle)}
+                  </span>
+                )}
               </div>
               <div className="flex items-baseline">
                 <span className="text-[40px] font-extrabold leading-none tracking-[-1px] text-gray-900">
@@ -104,19 +124,6 @@ export function PriceChartCard({ topMovers, isLoading }: PriceChartCardProps) {
                 >
                   {formatChangeRate(active.change_w1)} (WoW)
                 </span>
-              </div>
-              <div className="mt-1 flex gap-3 text-xs text-gray-500">
-                <span>score {active.score.toFixed(3)}</span>
-                {active.change_d1 != null && (
-                  <span>
-                    D-1 <span className={getChangeTextClass(active.change_d1)}>{formatChangeRate(active.change_d1)}</span>
-                  </span>
-                )}
-                {active.change_m1 != null && (
-                  <span>
-                    M-1 <span className={getChangeTextClass(active.change_m1)}>{formatChangeRate(active.change_m1)}</span>
-                  </span>
-                )}
               </div>
             </div>
 
@@ -143,7 +150,7 @@ export function PriceChartCard({ topMovers, isLoading }: PriceChartCardProps) {
             </div>
           </div>
 
-          <div className="relative mt-3">
+          <div className="relative mt-3 min-h-[180px] flex-1">
             <AnimatePresence mode="wait">
               <motion.div
                 key={`${idx}-${period}`}
@@ -151,8 +158,9 @@ export function PriceChartCard({ topMovers, isLoading }: PriceChartCardProps) {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -16 }}
                 transition={{ duration: 0.2 }}
+                className="h-full"
               >
-                <PriceChart data={series} unit={active.unit} />
+                <PriceChart data={series} unit={active.unit} className="h-full" />
               </motion.div>
             </AnimatePresence>
 
@@ -202,7 +210,7 @@ export function PriceChartCard({ topMovers, isLoading }: PriceChartCardProps) {
               해당 기간 데이터 포인트가 부족합니다.
             </div>
           )}
-        </>
+        </div>
       )}
     </Card>
   );

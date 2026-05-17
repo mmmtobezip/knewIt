@@ -53,7 +53,7 @@ export function QuestionsPanel() {
           related_groups_internal: q.related_groups_internal,
         });
         const ans = result.answer;
-        appendAssistantDelta(`${ans.briefing}\n\n— 응대 스크립트 —\n${ans.sales_rep_script}`);
+        appendAssistantDelta(`${ans.briefing}\n\n[추천 대응 방안]\n${ans.sales_rep_script}`);
       } catch {
         toast.show('MSG-ERR-03');
       } finally {
