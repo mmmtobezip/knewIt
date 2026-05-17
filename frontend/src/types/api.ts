@@ -9,6 +9,7 @@ import type {
   TodayQuestionsPayload,
   TopMover,
 } from './domain';
+import type { SalesGuidePayload } from './sales-guide';
 
 export interface ApiMeta {
   request_id: string;
@@ -54,6 +55,8 @@ export type TopMoversResponse = ApiResponse<{ product: string; top_movers: TopMo
 export type TodayQuestionsResponse = ApiResponse<TodayQuestionsPayload>;
 export type QuestionAnswerResponse = ApiResponse<{ answer: QuestionAnswer }>;
 export type CacheInvalidateResponse = ApiResponse<{ invalidated_keys: string[] }>;
+
+export type SalesGuideResponse = ApiResponse<SalesGuidePayload>;
 
 export type CacheScope =
   | 'top_movers'
