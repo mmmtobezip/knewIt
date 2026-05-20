@@ -34,6 +34,12 @@ export interface TopMover {
   change_m1: number | null;
   score: number;
   series: IndicatorPoint[];
+  /**
+   * 데이터 수집 주기 (예: 'D' 일별, 'W' 주별, 'M' 월별, 'Q' 분기, 'Y' 연별).
+   * BE Indicator 모델에는 존재하나 PRD 0514 응답에 아직 미포함 — optional 유지.
+   * docs/frontend-changes-affecting-backend.md 참조.
+   */
+  cycle?: string;
 }
 
 // ── Cause Flow (차트2) ───────────────────────────────────
@@ -50,16 +56,30 @@ export interface CauseFlowStep {
   evidence: FlowEvidence[];
 }
 
-// ── Interpretation (What/Why/Impact) ─────────────────────
+// ── Interpretation (What/Why/Impact) — PRD 0518 구조화 ──
+export interface WhatBlock {
+  headline: string;
+  key_metrics: string[];
+}
+
+export interface WhyDriver {
+  rank: number;
+  title: string;
+  consequence: string;
+}
+
+export type ImpactPriority = 'HIGH' | 'MEDIUM' | 'LOW';
+
 export interface ImpactItem {
   risk_factor: string;
   direction: '증폭' | '완화' | '중립';
+  priority: ImpactPriority;
   reason: string;
 }
 
 export interface Interpretation {
-  what: string;
-  why: string;
+  what: WhatBlock;
+  why: WhyDriver[];
   impact: ImpactItem[];
 }
 
@@ -116,4 +136,20 @@ export interface SessionUser {
   user_id: string;
   user_role: UserRole;
   name?: string;
+}
+
+// ── PRD 0516 — Users / Catalog ─────────────────────────
+export interface UserMe {
+  user_id: string;
+  name: string | null;
+  role: UserRole;
+  primary_product_code: string | null;
+  assigned_customers_count: number;
+}
+
+export interface CustomerCatalogItem {
+  customer_id: string;
+  industry: string;
+  market_region: string;
+  product_group: string[];
 }

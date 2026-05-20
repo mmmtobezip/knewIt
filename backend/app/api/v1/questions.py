@@ -45,7 +45,7 @@ class _QuestionsWrap(BaseModel):
 @router.get(
     "/today-questions",
     response_model=ApiSuccess[TodayQuestionsData],
-    summary="PRD 0514 추천 질문 3개 생성 (제품 단위)",
+    summary="PRD 0516 추천 질문 3개 생성 (제품 단위, 자정 KST 까지 고정)",
 )
 async def get_today_questions(
     product: str = Query(..., description="product_code (예: HR(고로밀))"),
@@ -55,7 +55,9 @@ async def get_today_questions(
     if (await db.get(Product, product)) is None:
         raise ApiException(ErrorCode.DATA_001, detail=f"product={product} 미정의")
 
-    key = make_key(CacheScope.QUESTIONS, "_", product, "_")
+    # PRD 0516 — 자정 KST boundary 로 고정. 같은 날(YYYY-MM-DD)이면 같은 질문.
+    today_kst = datetime.now(KST).date().isoformat()
+    key = make_key(CacheScope.QUESTIONS, today_kst, product, "_")
 
     async def compute() -> _QuestionsWrap:
         movers, _ = await top_movers_for_product(db, product, top_n=5)
@@ -100,11 +102,11 @@ class AnswerRequest(BaseModel):
 @router.post(
     "/today-questions/answer",
     response_model=ApiSuccess[QuestionAnswerData],
-    summary="PRD 0514 추천 질문 답변 (1분 브리핑 + 응대 스크립트)",
+    summary="PRD 0516 추천 질문 답변 (Few-Shot + Structured Output, 동적 호칭)",
 )
 async def post_answer(
     body: AnswerRequest,
-    user: SessionUser = Depends(get_current_user),  # noqa: ARG001
+    user: SessionUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ApiSuccess[QuestionAnswerData]:
     product = await db.get(Product, body.product)
@@ -149,15 +151,57 @@ async def post_answer(
         if len(related_data) >= 3:
             break
 
+    user_display = user.name or user.user_id
     llm = get_llm_service()
     answer = await llm.generate_answer(
         qid=body.qid,
         question_text=body.text,
+        user_name=user_display,
         trigger_indicators=trigger_data,
         related_indicators=related_data,
         adjacent_indicators=[],
     )
+    # 방어 후처리 — Structured Output 으로 형식은 거의 보장되지만
+    # 라벨 prefix / 호칭 오류 시 마지막 fallback.
+    answer.sales_rep_script = _sanitize_script(answer.sales_rep_script, user_display)
     return ok(QuestionAnswerData(answer=answer))
+
+
+_LABEL_PATTERN = "\n\n"
+_LABEL_PREFIXES = (
+    "[추천 대응 방안]",
+    "[추천대응방안]",
+    "추천 대응 방안:",
+    "추천 대응:",
+    "1)",
+    "①",
+)
+_BAD_HONORIFICS = ("고객님,", "선생님,", "사장님,", "판매담당자님,")
+
+
+def _sanitize_script(text: str, user_name: str) -> str:
+    """LLM 응답의 sales_rep_script 정제 (Phase A 방어 후처리).
+
+    - 다중 단락 → 첫 단락만 / 줄바꿈 → 공백
+    - 자체 라벨 prefix 제거
+    - 호칭이 "{user_name} 담당자님, " 가 아니면 강제 prepend
+    """
+    if not text:
+        return text
+    cleaned = text.split(_LABEL_PATTERN, 1)[0].replace("\n", " ").strip()
+    for prefix in _LABEL_PREFIXES:
+        if cleaned.startswith(prefix):
+            cleaned = cleaned[len(prefix):].strip()
+
+    expected = f"{user_name} 담당자님, "
+    if cleaned.startswith(expected):
+        return cleaned
+    # 잘못된 호칭 prefix 가 붙어있으면 제거 후 올바른 호칭 prepend
+    for bad in _BAD_HONORIFICS:
+        if cleaned.startswith(bad):
+            cleaned = cleaned[len(bad):].strip()
+            break
+    return f"{expected}{cleaned}"
 
 
 __all__ = ["router"]

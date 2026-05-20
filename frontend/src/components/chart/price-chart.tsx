@@ -3,17 +3,20 @@
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { TOKENS } from '@/styles/tokens';
 import { formatDate } from '@/shared/utils/format';
+import { cn } from '@/shared/utils/cn';
 import type { IndicatorPoint } from '@/types';
 
 interface PriceChartProps {
   data: IndicatorPoint[];
   unit?: string;
+  /** 외부에서 높이/크기를 제어할 때 사용. 미지정 시 기본 220px. */
+  className?: string;
 }
 
 /**
  * 가격 차트 (Recharts AreaChart) — PRD 0514 차트1 시계열.
  */
-export function PriceChart({ data, unit }: PriceChartProps) {
+export function PriceChart({ data, unit, className }: PriceChartProps) {
   const xTickFormatter = (value: string): string => {
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return value;
@@ -21,7 +24,7 @@ export function PriceChart({ data, unit }: PriceChartProps) {
   };
 
   return (
-    <div className="h-[220px] w-full">
+    <div className={cn('h-[220px] w-full', className)}>
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <defs>

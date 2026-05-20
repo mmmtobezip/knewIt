@@ -3,11 +3,13 @@
  */
 
 import type {
+  CustomerCatalogItem,
   CustomerProfile,
   DashboardPayload,
   QuestionAnswer,
   TodayQuestionsPayload,
   TopMover,
+  UserMe,
 } from './domain';
 
 export interface ApiMeta {
@@ -49,6 +51,11 @@ export interface ApiError {
 }
 
 export type CustomerProfileResponse = ApiResponse<{ customer_profile: CustomerProfile }>;
+export type UserMeResponse = ApiResponse<{ user: UserMe }>;
+export type CustomersCatalogResponse = ApiResponse<{
+  product: string | null;
+  customers: CustomerCatalogItem[];
+}>;
 export type DashboardResponse = ApiResponse<DashboardPayload>;
 export type TopMoversResponse = ApiResponse<{ product: string; top_movers: TopMover[] }>;
 export type TodayQuestionsResponse = ApiResponse<TodayQuestionsPayload>;

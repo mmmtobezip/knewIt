@@ -1,15 +1,21 @@
-"""고객사 접근 권한 (IPO Q15).
+"""고객사 접근 권한 (IPO Q15 + 해커톤 시연용 조정).
 
+PRD 원안:
 - sales: 본인 매핑 고객사만
 - manager: 본인 + org_hierarchy.subordinate 의 매핑 UNION
 - admin: 전체 고객사
+
+해커톤 시연 조정 (이 commit 범위):
+- `get_assigned_customer_ids`: PRD 원안 그대로 (catalog/customers 등이 본인 담당만 반환)
+- `assert_customer_access`: 시연용 통과 — dashboard 호출이 본인 매핑이 아닌 거래처여도 OK
+  (박지은이 박현웅 담당 고객사를 잘못 클릭해도 403 안 띄움)
+  정식 권한 검사 복원은 별도 commit 으로.
 """
 from __future__ import annotations
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import ApiException, ErrorCode
 from app.models import AssignedCustomer, CustomerProfile, OrgHierarchy
 from app.schemas.domain import SessionUser, UserRole
 
@@ -41,8 +47,9 @@ async def get_assigned_customer_ids(
 
 
 async def assert_customer_access(
-    db: AsyncSession, user: SessionUser, customer_id: str
+    db: AsyncSession,  # noqa: ARG001
+    user: SessionUser,  # noqa: ARG001
+    customer_id: str,  # noqa: ARG001
 ) -> None:
-    allowed = await get_assigned_customer_ids(db, user.user_id, user.user_role)
-    if customer_id not in allowed:
-        raise ApiException(ErrorCode.PERM_001)
+    """해커톤 시연용 통과. PRD 권한 검사는 별도 commit 에서 복원."""
+    return

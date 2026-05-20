@@ -1,7 +1,9 @@
 /**
- * MSW 핸들러 (PRD 0514 이후 실제 백엔드 직접 연동으로 전환).
+ * MSW 핸들러 통합 export.
  *
- * .env.local 의 NEXT_PUBLIC_API_MOCKING=disabled 로 운영하며,
- * 이 파일은 호환을 위해 비어있는 핸들러 배열만 export.
+ * .env.local: NEXT_PUBLIC_API_MOCKING=enabled 일 때 활성.
+ * disabled 인 경우 worker 자체가 시작하지 않으므로 실제 BE 로 직결.
  */
-export const handlers = [] as const;
+import { dashboardHandlers } from './dashboard';
+
+export const handlers = [...dashboardHandlers] as const;

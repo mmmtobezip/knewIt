@@ -105,7 +105,7 @@ async def top_movers_for_product(
     for idx, feature in enumerate(product.key_features or []):
         weight = importance[idx] if idx < len(importance) else 0.0
         cycle = cycles[idx] if idx < len(cycles) else None
-        snap = await fetch_indicator(db, feature, period_days=90)
+        snap = await fetch_indicator(db, feature, period_days=365)
         if snap is None:
             continue
         score = round(abs(snap.change_w1) * weight, 4)

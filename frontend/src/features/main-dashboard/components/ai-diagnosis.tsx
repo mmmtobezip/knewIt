@@ -1,42 +1,44 @@
 'use client';
 
-import { TriangleAlert } from 'lucide-react';
 import { Card, CardTitle, CardSubtitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
-import type { Interpretation } from '@/types';
+import type { ImpactItem, Interpretation } from '@/types';
 import { cn } from '@/shared/utils/cn';
 
 /**
- * AI 진단 (PRD 0514) — WHAT / WHY / IMPACT.
+ * AI 진단 (PRD 0518) — WHAT / WHY / IMPACT 구조화.
  *
- * impact 는 객체 배열 ({risk_factor, direction, reason}).
- *  - 증폭: 빨강 / 완화: 파랑 / 중립: 회색
+ *  - WHAT  : headline 한 줄 + key_metrics 2~3 bullet
+ *  - WHY   : 드라이버 3개 (rank, title, consequence)
+ *  - IMPACT: direction 별 그룹화 + priority 색상 코드
  */
 interface AiDiagnosisProps {
   interpretation: Interpretation | null;
   isLoading?: boolean;
 }
 
-const DIRECTION_COLORS: Record<string, string> = {
-  증폭: 'bg-red-50 text-red-700 border-red-200',
-  완화: 'bg-blue-50 text-blue-700 border-blue-200',
-  중립: 'bg-gray-50 text-gray-700 border-gray-200',
+const DIRECTION_STYLE: Record<
+  ImpactItem['direction'],
+  { emoji: string; stripe: string; label: string }
+> = {
+  증폭: { emoji: '🔴', stripe: 'bg-red-400', label: 'text-red-700' },
+  완화: { emoji: '🟢', stripe: 'bg-emerald-400', label: 'text-emerald-700' },
+  중립: { emoji: '⚪', stripe: 'bg-gray-300', label: 'text-gray-600' },
 };
 
 export function AiDiagnosis({ interpretation, isLoading }: AiDiagnosisProps) {
   return (
     <Card className="flex flex-col">
       <CardTitle>
-        <TriangleAlert className="h-5 w-5 text-danger" />
         AI 진단 <CardSubtitle>(무슨 일이 일어나고 있는가?)</CardSubtitle>
       </CardTitle>
 
       {isLoading ? (
         <div className="mt-4 flex flex-1 flex-col gap-3">
-          <Skeleton className="flex-1" />
-          <Skeleton className="flex-1" />
-          <Skeleton className="flex-1" />
+          <Skeleton className="h-24" />
+          <Skeleton className="h-40" />
+          <Skeleton className="h-32" />
         </div>
       ) : !interpretation ? (
         <div className="flex flex-1 items-center">
@@ -44,58 +46,120 @@ export function AiDiagnosis({ interpretation, isLoading }: AiDiagnosisProps) {
         </div>
       ) : (
         <div className="mt-4 flex flex-1 flex-col gap-3">
-          <DiagCard label="WHAT" color="text-danger" bgClass="bg-diag-what">
-            <p className="text-[13px] font-medium leading-relaxed tracking-tight text-gray-800">
-              {interpretation.what}
-            </p>
-          </DiagCard>
-
-          <DiagCard label="WHY" color="text-[#D97706]" bgClass="bg-diag-why">
-            <p className="whitespace-pre-line text-[13px] font-medium leading-relaxed tracking-tight text-gray-800">
-              {interpretation.why}
-            </p>
-          </DiagCard>
-
-          <DiagCard label="IMPACT" color="text-[#00A878]" bgClass="bg-diag-impact" stretch>
-            <ul className="space-y-2">
-              {interpretation.impact.map((item, idx) => (
-                <li key={idx} className="text-[13px] leading-relaxed text-gray-800">
-                  <div className="mb-1 flex items-center gap-2">
-                    <span className="font-semibold text-gray-900">{item.risk_factor}</span>
-                    <span
-                      className={cn(
-                        'rounded-full border px-2 py-0.5 text-[11px] font-bold',
-                        DIRECTION_COLORS[item.direction] ?? DIRECTION_COLORS['중립'],
-                      )}
-                    >
-                      {item.direction}
-                    </span>
-                  </div>
-                  <div className="text-[12px] font-medium text-gray-700">{item.reason}</div>
-                </li>
-              ))}
-            </ul>
-          </DiagCard>
+          <WhatSection what={interpretation.what} />
+          <WhySection why={interpretation.why} />
+          <ImpactSection impact={interpretation.impact} />
         </div>
       )}
     </Card>
   );
 }
 
-interface DiagCardProps {
-  label: string;
-  color: string;
-  bgClass: string;
-  children: React.ReactNode;
-  /** true 면 부모 flex-col 안에서 남는 공간을 모두 차지. */
-  stretch?: boolean;
+// ── WHAT ─────────────────────────────────────────
+function WhatSection({ what }: { what: Interpretation['what'] }) {
+  return (
+    <div className="rounded-2xl bg-diag-what p-[18px]">
+      <div className="mb-2 flex items-center gap-1.5">
+        <span aria-hidden>📊</span>
+        <span className="text-xs font-extrabold tracking-wide text-danger">WHAT</span>
+      </div>
+      <p className="text-[14px] font-bold leading-snug tracking-tight text-gray-900">
+        {what.headline}
+      </p>
+      {what.key_metrics.length > 0 && (
+        <ul className="mt-3 space-y-1.5">
+          {what.key_metrics.map((m, idx) => (
+            <li
+              key={idx}
+              className="flex items-start gap-1.5 text-[12.5px] font-medium leading-relaxed tracking-tight text-gray-700"
+            >
+              <span aria-hidden className="mt-[2px] text-gray-500">•</span>
+              <span>{m}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
-function DiagCard({ label, color, bgClass, children, stretch }: DiagCardProps) {
+// ── WHY ──────────────────────────────────────────
+function WhySection({ why }: { why: Interpretation['why'] }) {
+  const sorted = [...why].sort((a, b) => a.rank - b.rank);
   return (
-    <div className={cn('rounded-2xl p-[18px]', bgClass, stretch && 'flex-1')}>
-      <div className={`mb-2.5 text-xs font-extrabold tracking-wide ${color}`}>{label}</div>
-      {children}
+    <div className="rounded-2xl bg-diag-why p-[18px]">
+      <div className="mb-2 flex items-center gap-1.5">
+        <span aria-hidden>🔍</span>
+        <span className="text-xs font-extrabold tracking-wide text-[#D97706]">WHY</span>
+      </div>
+      <ol className="space-y-2.5">
+        {sorted.map((d) => (
+          <li key={d.rank} className="flex items-start gap-2.5">
+            <span
+              className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#D97706] text-[11px] font-extrabold text-white"
+              aria-hidden
+            >
+              {d.rank}
+            </span>
+            <div className="flex-1">
+              <div className="text-[13px] font-bold leading-snug tracking-tight text-gray-900">
+                {d.title}
+              </div>
+              <div className="text-[12px] font-medium leading-relaxed tracking-tight text-gray-700">
+                {d.consequence}
+              </div>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+// ── IMPACT (direction 그룹 — priority 배지 미노출, 단순화) ─────
+function ImpactSection({ impact }: { impact: ImpactItem[] }) {
+  const groups: Record<ImpactItem['direction'], ImpactItem[]> = {
+    증폭: [],
+    완화: [],
+    중립: [],
+  };
+  for (const it of impact) groups[it.direction]?.push(it);
+
+  return (
+    <div className="flex flex-1 flex-col rounded-2xl bg-diag-impact p-[18px]">
+      <div className="mb-2 flex items-center gap-1.5">
+        <span aria-hidden>⚠️</span>
+        <span className="text-xs font-extrabold tracking-wide text-[#00A878]">IMPACT</span>
+      </div>
+      <ul className="flex flex-1 flex-col gap-3">
+        {(['증폭', '완화', '중립'] as const).flatMap((dir) =>
+          groups[dir].map((it, idx) => {
+            const s = DIRECTION_STYLE[dir];
+            return (
+              <li key={`${dir}-${idx}`} className="flex items-stretch gap-3">
+                <span
+                  aria-hidden
+                  className={cn('w-[3px] shrink-0 self-stretch rounded-full', s.stripe)}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className={cn('text-[11px] font-extrabold tracking-wide', s.label)}>
+                      {dir}
+                    </span>
+                    <span aria-hidden className="text-gray-300">·</span>
+                    <span className="text-[13px] font-bold tracking-tight text-gray-900">
+                      {it.risk_factor}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[12px] font-medium leading-relaxed tracking-tight text-gray-700">
+                    {it.reason}
+                  </p>
+                </div>
+              </li>
+            );
+          }),
+        )}
+      </ul>
     </div>
   );
 }

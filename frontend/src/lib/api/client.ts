@@ -1,42 +1,16 @@
 import ky, { type KyInstance } from 'ky';
 import type { ApiResponse, ApiFailure } from '@/types';
+import { useCurrentUserStore } from '@/stores/current-user-store';
 
 /**
- * 중앙 API 클라이언트
+ * 중앙 API 클라이언트.
  *
- * 모든 API 호출은 이 ky 인스턴스를 거침.
- * - 공통 응답 wrapper(ApiResponse) 자동 unwrap
- * - 인증 토큰 자동 첨부
- * - 401 시 /login 리다이렉트
- * - 에러 코드 매핑 후 toast로 위임
- *
- * main-ipo.md § 3-6 API 응답 표준 / § 3-7 에러 코드 체계
+ * PRD 0516 — auth 미사용 (해커톤 시연). 매 요청마다 zustand store 에서
+ * 현재 user_id 읽어 X-User-Id 헤더로 주입. URL ?user 가 바뀌면 즉시 반영.
  */
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
-
-/**
- * 토큰 획득 훅 (실제 구현 시 SSO/JWT 스토어 연결)
- * MVP에서는 localStorage 또는 mock token 사용
- */
-function getAuthToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('auth-token') ?? 'mock-token-emp_2026001';
-}
-
-/**
- * 인증 만료 핸들러 — 세션 만료 시 로그인 페이지로 강제 이동
- * (main-ipo.md E_AUTH_001 → MSG-ERR-07)
- */
-function handleAuthExpired(): void {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem('auth-token');
-  // 약간 지연 후 리다이렉트 (토스트가 보이도록)
-  setTimeout(() => {
-    window.location.href = '/login';
-  }, 3_000);
-}
 
 export const apiClient: KyInstance = ky.create({
   prefixUrl: BASE_URL,
@@ -50,29 +24,18 @@ export const apiClient: KyInstance = ky.create({
   hooks: {
     beforeRequest: [
       (request) => {
-        const token = getAuthToken();
-        if (token) {
-          request.headers.set('Authorization', `Bearer ${token}`);
-        }
+        // 매 요청 zustand getState() 로 최신 값 (subscribe 아님 → 항상 fresh).
+        const userId = useCurrentUserStore.getState().userId;
+        request.headers.set('X-User-Id', userId);
         request.headers.set('X-Request-ID', crypto.randomUUID());
-      },
-    ],
-    afterResponse: [
-      async (_request, _options, response) => {
-        if (response.status === 401) {
-          handleAuthExpired();
-        }
-        return response;
       },
     ],
   },
 });
 
 /**
- * 응답 unwrap 헬퍼
- *
- * 백엔드가 ApiResponse<T> 로 감싸서 보내면 data 필드만 반환.
- * 실패 응답이면 에러를 throw 하여 TanStack Query 의 onError 트리거.
+ * 응답 unwrap 헬퍼.
+ * 백엔드 ApiResponse<T> 에서 data 필드만 반환. 실패 응답이면 ApiClientError throw.
  */
 export async function unwrap<T>(promise: Promise<ApiResponse<T>>): Promise<T> {
   const res = await promise;
@@ -82,7 +45,6 @@ export async function unwrap<T>(promise: Promise<ApiResponse<T>>): Promise<T> {
   return res.data;
 }
 
-/** API 응답 에러 — Query/Mutation 에서 catch 후 toast 매핑 */
 export class ApiClientError extends Error {
   readonly code: ApiFailure['error']['code'];
   readonly detail?: string;

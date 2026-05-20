@@ -1,13 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { Bell, User, RefreshCw } from 'lucide-react';
+import { User, RefreshCw } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { APP, REFRESH } from '@/shared/constants';
 import { Select } from '@/components/ui/select';
 import { useSelectionStore } from '@/stores/selection-store';
 import { useChatStore } from '@/stores/chat-store';
-import { useCustomerProfile, useInvalidateCache } from '@/lib/api/queries/dashboard';
+import {
+  useCatalogCustomers,
+  useCustomerProfile,
+  useInvalidateCache,
+  useUsersMe,
+} from '@/lib/api/queries/dashboard';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import { toast } from '@/stores/toast-store';
 import { formatTime } from '@/shared/utils/format';
@@ -31,16 +36,53 @@ export function AppHeader() {
   const startNewSession = useChatStore((s) => s.startNewSession);
   const invalidate = useInvalidateCache();
   const profileQuery = useCustomerProfile(customerId);
+  const meQuery = useUsersMe();
+  const myPrimary = meQuery.data?.primary_product_code ?? null;
+  const myCustomersQuery = useCatalogCustomers(myPrimary);
 
-  // PRD 0514 § 4.1: customer.product_group → 메인 대시보드 차트1 데이터 필터.
-  // 제품 드롭다운은 현재 고객사가 다루는 제품군만 표시 (1개면 단일 옵션).
-  const allowedProducts = profileQuery.data?.product_group ?? [];
+  // 제품 드롭다운: 박지은(선재) → ['선재'] / 박현웅(후판) → ['후판'] /
+  // primary 없으면 customer.product_group, 그것도 없으면 PRODUCTS 전체.
+  const productAllowList: string[] | null = myPrimary
+    ? [myPrimary]
+    : profileQuery.data?.product_group ?? null;
   const productOptions = PRODUCTS.filter(
-    (p) => allowedProducts.length === 0 || allowedProducts.includes(p.code),
+    (p) => productAllowList === null || productAllowList.includes(p.code),
   ).map((p) => ({ value: p.code, label: p.name }));
-  const customerOptions = CUSTOMERS.slice()
-    .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
-    .map((c) => ({ value: c.id, label: c.name }));
+
+  // 고객사 드롭다운: /api/catalog/customers 응답 우선, 없으면 정적 CUSTOMERS 카탈로그 fallback.
+  const customerOptions = (
+    myCustomersQuery.data?.length
+      ? myCustomersQuery.data.map((c) => ({ value: c.customer_id, label: c.customer_id }))
+      : CUSTOMERS.slice()
+          .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+          .map((c) => ({ value: c.id, label: c.name }))
+  );
+
+  // ── 디버그 로그 (개발 환경) ─────────────────────────────
+  if (typeof window !== 'undefined') {
+    // eslint-disable-next-line no-console
+    console.group('[AppHeader] state');
+    // eslint-disable-next-line no-console
+    console.log('user:', meQuery.data?.user_id, '/', meQuery.data?.name, '| primary:', myPrimary);
+    // eslint-disable-next-line no-console
+    console.log('customerId:', customerId, '| productCode:', productCode);
+    // eslint-disable-next-line no-console
+    console.log('profile.product_group:', profileQuery.data?.product_group);
+    // eslint-disable-next-line no-console
+    console.log(
+      'productOptions:',
+      productOptions.map((p) => p.value),
+    );
+    // eslint-disable-next-line no-console
+    console.log(
+      'customerOptions(BE):',
+      myCustomersQuery.data?.map((c) => c.customer_id) ?? '(loading or fallback CUSTOMERS)',
+    );
+    // eslint-disable-next-line no-console
+    console.log('auth-token:', typeof localStorage !== 'undefined' ? localStorage.getItem('auth-token') : '(SSR)');
+    // eslint-disable-next-line no-console
+    console.groupEnd();
+  }
 
   /** 고객사 변경 (P-02) */
   const handleCustomerChange = (newCustomerId: string) => {
@@ -121,12 +163,6 @@ export function AppHeader() {
         새로고침
       </motion.button>
 
-      <button
-        className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 transition-colors hover:bg-gray-200"
-        aria-label="알림"
-      >
-        <Bell className="h-4 w-4 text-gray-700" />
-      </button>
       <button
         className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 transition-colors hover:bg-gray-200"
         aria-label="프로필"
