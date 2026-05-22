@@ -5,5 +5,6 @@
  * disabled 인 경우 worker 자체가 시작하지 않으므로 실제 BE 로 직결.
  */
 import { dashboardHandlers } from './dashboard';
+import { salesGuideHandlers } from './sales-guide';
 
-export const handlers = [...dashboardHandlers] as const;
+export const handlers = [...dashboardHandlers, ...salesGuideHandlers] as const;
