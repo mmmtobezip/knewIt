@@ -96,6 +96,7 @@ class CacheScope(StrEnum):
     STRATEGY = "strategy"
     NEWS = "news"
     QUESTIONS = "questions"
+    SALES_GUIDE = "sales_guide"
 
 
 class CacheInvalidateRequest(BaseModel):
