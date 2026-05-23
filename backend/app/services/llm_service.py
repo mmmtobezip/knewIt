@@ -358,6 +358,79 @@ class LLMService:
         data["qid"] = qid
         return QuestionAnswer.model_validate(data)
 
+    async def compute_market_impact(
+        self,
+        *,
+        product: str,
+        customer_industry: str,
+        market_region: str,
+        sensitive_topics: list[str],
+        features: list[dict],
+    ) -> dict:
+        """판매량 가이드 Module 2 — 고객사별 시황영향 (노션 4.2.4).
+
+        features: [{name, change_pct, cycle, weight}, ...]
+        반환: {"directions": {feat_name: +1/-1/0, ...}, "market_score": float%}
+        temperature=0 으로 결정론적 응답 (LLM 응답 일관성).
+        """
+        prompt = _render(
+            _load_prompt("market_impact"),
+            product=product,
+            customer_industry=customer_industry,
+            market_region=market_region,
+            sensitive_topics_json=_to_json(sensitive_topics),
+            features_json=_to_json(features),
+        )
+        tool_def = {
+            "name": "submit_market_impact",
+            "description": "시황영향 방향 부호 + market_score 제출",
+            "input_schema": {
+                "type": "object",
+                "required": ["directions", "market_score"],
+                "properties": {
+                    "directions": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "integer",
+                            "enum": [-1, 0, 1],
+                        },
+                        "description": "각 지표명 → +1/-1/0 방향 부호",
+                    },
+                    "market_score": {
+                        "type": "number",
+                        "description": "Σ(변화율 × 가중치 × 부호) 의 % 값",
+                    },
+                },
+            },
+        }
+        try:
+            resp = await self.client.messages.create(
+                model=self.model,
+                max_tokens=800,
+                temperature=0,
+                tools=[tool_def],
+                tool_choice={"type": "tool", "name": "submit_market_impact"},
+                messages=[{"role": "user", "content": prompt}],
+            )
+        except anthropic.APITimeoutError as e:
+            raise ApiException(ErrorCode.LLM_002) from e
+        except anthropic.RateLimitError as e:
+            raise ApiException(ErrorCode.LLM_003) from e
+        except anthropic.APIError as e:
+            logger.exception("anthropic api error (market_impact tool_use)")
+            raise ApiException(ErrorCode.LLM_001, detail=str(e)) from e
+
+        tool_block = next(
+            (b for b in resp.content if getattr(b, "type", None) == "tool_use"),
+            None,
+        )
+        if tool_block is None:
+            raise ApiException(ErrorCode.LLM_001, detail="market_impact tool_use 미반환")
+        data = dict(tool_block.input)
+        directions = {str(k): int(v) for k, v in (data.get("directions") or {}).items()}
+        score = float(data.get("market_score") or 0.0)
+        return {"directions": directions, "market_score": score}
+
 
 _llm: LLMService | None = None
 
