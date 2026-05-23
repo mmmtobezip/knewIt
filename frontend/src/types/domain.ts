@@ -136,4 +136,31 @@ export interface SessionUser {
   user_id: string;
   user_role: UserRole;
   name?: string;
+  primary_product_code?: string | null;
+  employee_no?: string | null;
+  department?: string | null;
+  email?: string | null;
+}
+
+// ── PRD 0516 — 카탈로그 (lv1/lv2) ────────────────────────
+export interface CustomerCatalogItem {
+  customer_id: string;
+  industry: string;
+  market_region: string;
+  product_group: string[];
+}
+
+// ── PRD 0523 — 사용자 프로필 응답 ─────────────────────────
+export interface UserOut {
+  user_id: string;
+  name: string | null;
+  role: UserRole;
+  primary_product_code: string | null;
+  employee_no: string | null;
+  department: string | null;
+  email: string | null;
+}
+
+export interface UserMe extends UserOut {
+  assigned_customers_count: number;
 }

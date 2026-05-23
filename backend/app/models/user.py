@@ -18,11 +18,16 @@ class AssignmentRole(StrEnum):
 
 
 class User(Base, TimestampMixin):
-    """사용자 (PRD 0516).
+    """사용자 (PRD 0523).
 
-    primary_product_code: 담당자:제품 = 1:1 매핑. 박지은=선재, 박현웅=후판.
-        로그인 화면 없이 프로필 picker 로 시나리오 시작 시 자동 lv1 활성용.
-        NULL 허용 (관리자/매니저/기존 사원은 미지정).
+    PRD 0516:
+      - primary_product_code: 담당자:제품 = 1:1 매핑 (박지은=선재, 박현웅=후판)
+
+    PRD 0523 (로그인 + 프로필 팝업):
+      - employee_no: 사번 (예: "301096")
+      - department: 소속실 (예: "열연선재마케팅실")
+      - email: 사내 이메일 (예: "jieun.park@posco.com")
+      - 모두 nullable (관리자/매니저 등 시연용 외 사용자 호환)
     """
     __tablename__ = "users"
 
@@ -34,6 +39,9 @@ class User(Base, TimestampMixin):
         default=UserRole.SALES,
     )
     primary_product_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    employee_no: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    department: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
 
 class OrgHierarchy(Base):

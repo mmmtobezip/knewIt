@@ -1,14 +1,20 @@
-"""PRD 0516 — CUSTOMER_PROFILE / PRODUCT_CONFIG / USER seed.
+"""PRD 0523 — CUSTOMER_PROFILE / PRODUCT_CONFIG / USER seed.
 
-해커톤 시연 시나리오:
-- 박지은 (emp_2026003): primary_product_code="선재", 선재 거래처 5개
-- 박현웅 (emp_2026004): primary_product_code="후판", 후판 거래처 5개
-- 이윤진 (emp_2026001): 기존 거래처 (HR/후판/부산물 다양) 유지
-- 포스코인터내셔널: product_group=["선재","후판"] 단일 행 → 박지은과 박현웅 둘 다 매핑
+해커톤 시연 시나리오 (최종):
+- 박지은 (emp_2026003): primary=선재, 선재 5 거래처
+- 박현웅 (emp_2026004): primary=후판, 후판 5 거래처
+- 포스코인터내셔널 분리:
+  - "포스코인터내셔널-선재": 박지은 담당 (글로벌 트레이딩/유통)
+  - "포스코인터내셔널-후판": 박현웅 담당 (글로벌 트레이딩/에너지)
+- 기존 6개 거래처 (Borcelik, Berg Steel, 썬시멘트, 세아씨엠, JFE, Ningbo) 폐기
+- 기타 사용자 (이윤진, 김매니저, 관리자) 폐기
 
-PRODUCT_CONFIG 정정 사항:
-- "중국 수출 구매자 관리자 지수(PMI" → "(PMI)" 닫는 괄호 보강
-- "미국 철스크랩 컴포짓가 " 끝 공백 trim
+PRODUCT_CONFIG 변경:
+- 선재: 7번째 지표 "한국 건설 기성액" → "미국 자동차 판매대수SAAR"
+- 선재 cycle 마지막 D / 후판 cycle 마지막 D / 부산물 cycle 마지막 D
+- 냉연(CR) cycle 일부 W→D
+- 정정: "중국 수출 구매자 관리자 지수(PMI" → 닫는 괄호 보강 (HR, STS 304)
+- 정정: "미국 철스크랩 컴포짓가 " 끝 공백 trim (부산물)
 """
 from __future__ import annotations
 
@@ -37,12 +43,12 @@ PRODUCT_CONFIG: dict[str, dict] = {
             "동아시아 철스크랩 수입가",
             "중국 10일 주기 주요 제철소 철강 재고(CISA)",
             "한국 철스크랩 생철 A (Busheling A) 가격 - 평균",
-            "한국 건설 기성액(총기성액)(경상지수)",
+            "미국 자동차 판매대수SAAR",  # PRD 0523 변경 (구: 한국 건설 기성액)
             "다우존스 산업평균지수",
             "미국 10년 만기 국채 수익률",
             "한국은행 기준금리",
         ],
-        "key_feature_cycle": ["D", "D", "D", "W", "W", "W", "M", "D", "D", "M"],
+        "key_feature_cycle": ["D", "W", "D", "W", "W", "W", "M", "D", "D", "D"],
         "key_feature_importance": [0.20, 0.15, 0.15, 0.10, 0.10, 0.05, 0.05, 0.08, 0.06, 0.06],
     },
     "후판": {
@@ -58,7 +64,7 @@ PRODUCT_CONFIG: dict[str, dict] = {
             "다우존스 산업평균지수",
             "한국은행 기준금리",
         ],
-        "key_feature_cycle": ["W", "D", "D", "W", "W", "W", "W", "D", "D", "M"],
+        "key_feature_cycle": ["D", "W", "D", "W", "W", "W", "W", "D", "D", "D"],
         "key_feature_importance": [0.20, 0.15, 0.15, 0.10, 0.10, 0.05, 0.05, 0.08, 0.06, 0.06],
     },
     "HR(고로밀)": {
@@ -70,11 +76,11 @@ PRODUCT_CONFIG: dict[str, dict] = {
             "중국 철강제품 수출량",
             "중국 열연(HR) Sheet/Coil Mill 운영률(Operating Rate)",
             "중국 열연(HR) Coil SS400 수출가",
-            "중국 수출 구매자 관리자 지수(PMI)",  # 정정: 닫는 괄호 보강
+            "중국 수출 구매자 관리자 지수(PMI)",  # 정정: 닫는 괄호
             "다우존스 산업평균지수",
             "미국 10년 만기 국채 수익률",
         ],
-        "key_feature_cycle": ["D", "D", "W", "W", "M", "W", "W", "M", "D", "D"],
+        "key_feature_cycle": ["D", "D", "D", "W", "M", "W", "W", "M", "D", "D"],
         "key_feature_importance": [0.20, 0.15, 0.15, 0.10, 0.10, 0.05, 0.05, 0.08, 0.06, 0.06],
     },
     "냉연(CR)": {
@@ -90,7 +96,7 @@ PRODUCT_CONFIG: dict[str, dict] = {
             "미국 10년 만기 국채 수익률",
             "한국은행 기준금리",
         ],
-        "key_feature_cycle": ["W", "D", "W", "W", "M", "M", "M", "D", "D", "M"],
+        "key_feature_cycle": ["W", "D", "D", "D", "M", "M", "M", "D", "D", "D"],
         "key_feature_importance": [0.20, 0.15, 0.15, 0.10, 0.10, 0.05, 0.05, 0.08, 0.06, 0.06],
     },
     "STS 304": {
@@ -104,7 +110,7 @@ PRODUCT_CONFIG: dict[str, dict] = {
             "중국 철강제품 수출량",
             "다우존스 산업평균지수",
             "미국 10년 만기 국채 수익률",
-            "중국 수출 구매자 관리자 지수(PMI)",  # 정정: 닫는 괄호 보강
+            "중국 수출 구매자 관리자 지수(PMI)",  # 정정: 닫는 괄호
         ],
         "key_feature_cycle": ["D", "W", "M", "W", "M", "W", "M", "D", "D", "M"],
         "key_feature_importance": [0.25, 0.15, 0.15, 0.10, 0.05, 0.05, 0.05, 0.08, 0.06, 0.06],
@@ -122,16 +128,16 @@ PRODUCT_CONFIG: dict[str, dict] = {
             "미국 10년 만기 국채 수익률",
             "한국은행 기준금리",
         ],
-        "key_feature_cycle": ["W", "W", "W", "D", "W", "M", "W", "D", "D", "M"],
+        "key_feature_cycle": ["W", "W", "W", "D", "W", "M", "W", "D", "D", "D"],
         "key_feature_importance": [0.20, 0.15, 0.15, 0.10, 0.10, 0.05, 0.05, 0.08, 0.06, 0.06],
     },
 }
 
 
-# ── CUSTOMER_PROFILE (15개) ────────────────────────────────────────
-# 신규 후판 5 + 신규 선재 4 (포스코인터는 product_group ["선재","후판"] 단일 행) + 기존 6
+# ── CUSTOMER_PROFILE (10개) ────────────────────────────────────────
+# 포스코인터내셔널은 후판/선재로 분리된 두 entity (customer_id suffix)
 CUSTOMER_PROFILE: dict[str, dict] = {
-    # ── 후판 신규 5 (박현웅 담당) ─────────────────────────
+    # ── 후판 5 (박현웅 담당) ───────────────────────────
     "현대중공업": {
         "industry": "조선 (상선/해양플랜트)",
         "product_group": ["후판"],
@@ -160,29 +166,31 @@ CUSTOMER_PROFILE: dict[str, dict] = {
         "sensitive_topics": ["국내 건설 기성액", "사회인프라(SOC) 예산", "강구조 수요"],
         "risk_factors": ["분양 시장 위축", "공사비 증액에 따른 발주 취소", "원자재가 변동"],
     },
-    # 포스코인터내셔널: 선재 + 후판 둘 다 다룸 (단일 행, product_group 다중)
-    # 박지은(선재) / 박현웅(후판) 각자 다른 시나리오로 진입
-    "포스코인터내셔널": {
-        "industry": "글로벌 트레이딩/유통/에너지",
-        "product_group": ["선재", "후판"],
+    "포스코인터내셔널-후판": {
+        "industry": "글로벌 트레이딩/에너지",
+        "product_group": ["후판"],
+        "market_region": "글로벌",
+        "sensitive_topics": ["글로벌 오퍼 가격", "물류 및 용선료", "수출 쿼터 및 통상 이슈"],
+        "risk_factors": ["보호무역주의 확산", "지정학적 리스크에 따른 물류 차질", "가격 하락 시 재고 평가 손실"],
+    },
+    # ── 선재 5 (박지은 담당) ───────────────────────────
+    "포스코인터내셔널-선재": {
+        "industry": "글로벌 트레이딩/유통",
+        "product_group": ["선재"],
         "market_region": "글로벌 (동남아/미주/유럽)",
         "sensitive_topics": [
             "중국산 선재 오퍼가 변동",
             "글로벌 물류비 및 용선료 추이",
             "지역별 선재 스폿 가격차(Price Gap)",
             "수출 환율 변동성",
-            "글로벌 후판 오퍼 가격",
-            "수출 쿼터 및 통상 이슈",
         ],
         "risk_factors": [
             "각국 보호무역 조치(반덤핑 등) 강화",
             "글로벌 금리 인상에 따른 재고 금융 비용 상승",
             "도착지별 재고 과잉 및 수요 둔화",
             "지정학적 리스크에 따른 운송 지연",
-            "가격 하락 시 재고 평가 손실",
         ],
     },
-    # ── 선재 신규 4 (박지은 담당) — 포스코인터내셔널 위에 정의됨 ──
     "고려제강": {
         "industry": "건설/인프라용 선재",
         "product_group": ["선재"],
@@ -211,114 +219,47 @@ CUSTOMER_PROFILE: dict[str, dict] = {
         "sensitive_topics": ["건설 경기", "철스크랩 가격", "유통 재고", "수입재 가격"],
         "risk_factors": ["국내 건설 경기 하락", "저가 수입재 유입"],
     },
-    # ── 기존 6 (이윤진 담당 유지) ─────────────────────────
-    "Borcelik Celik Sanayii VE Ticaret AS": {
-        "industry": "자동차/가전 외판재",
-        "product_group": ["HR(고로밀)"],
-        "market_region": "유럽/터키",
-        "sensitive_topics": ["글로벌 열연 가격", "에너지 비용", "유럽 제조업 경기", "환율"],
-        "risk_factors": ["CBAM 규제", "터키 내수 경기 변동성"],
-    },
-    "Berg Steel Pipe Corp": {
-        "industry": "에너지 강관(Oil & Gas)",
-        "product_group": ["후판"],
-        "market_region": "북미",
-        "sensitive_topics": ["에너지 프로젝트", "후판 납기", "수입 규제", "원자재 가격"],
-        "risk_factors": ["북미 에너지 정책 변화", "프로젝트 지연"],
-    },
-    "썬시멘트주식회사": {
-        "industry": "시멘트/건설소재",
-        "product_group": ["부산물(철스크랩)"],
-        "market_region": "국내",
-        "sensitive_topics": ["건설 경기", "원가 절감", "에너지 비용", "환경 규제"],
-        "risk_factors": ["건설 착공 감소", "환경 규제 강화"],
-    },
-    "세아씨엠": {
-        "industry": "컬러강판/가전/건재",
-        "product_group": ["HR(고로밀)"],
-        "market_region": "국내",
-        "sensitive_topics": ["열연 소재 가격", "컬러강판 수요", "가전 경기", "건설 경기"],
-        "risk_factors": ["가전 및 건설 경기 부진", "중국산 열연 가격 압박"],
-    },
-    "JFE Techno Wire Corporation": {
-        "industry": "고기능성 특수 선재",
-        "product_group": ["선재"],
-        "market_region": "일본",
-        "sensitive_topics": ["기술 스펙", "동아시아 철스크랩 가격", "일본 제조업 경기", "원재료 수급"],
-        "risk_factors": ["일본 내수 시황 위축", "원재료 수급 불안"],
-    },
-    "Ningbo Dafeng Machinery Co., Ltd": {
-        "industry": "산업기계 부품",
-        "product_group": ["선재"],
-        "market_region": "중국",
-        "sensitive_topics": ["중국 제조업 경기", "중국 내수 가격", "가동률", "공급 과잉"],
-        "risk_factors": ["중국 경기 부양 효과 약화", "현지 공급 과잉"],
-    },
 }
 
 
-# ── USER_SEED ──────────────────────────────────────────────────────
+# ── USER_SEED (2명, 해커톤 시연 최종) ──────────────────────────────
 USER_SEED: list[dict] = [
-    # 박지은: 선재 1:1 (해커톤 시연 메인 사원 A)
     {
         "user_id": "emp_2026003",
         "name": "박지은",
         "role": UserRole.SALES,
         "primary_product_code": "선재",
+        "employee_no": "301096",
+        "department": "열연선재마케팅실",
+        "email": "jieun.park@posco.com",
     },
-    # 박현웅: 후판 1:1 (해커톤 시연 메인 사원 B)
     {
         "user_id": "emp_2026004",
         "name": "박현웅",
         "role": UserRole.SALES,
         "primary_product_code": "후판",
-    },
-    # 이윤진: 기존 다중 제품 담당 (HR/후판/부산물 등)
-    {
-        "user_id": "emp_2026001",
-        "name": "이윤진",
-        "role": UserRole.SALES,
-        "primary_product_code": None,
-    },
-    {
-        "user_id": "emp_2026002",
-        "name": "김매니저",
-        "role": UserRole.MANAGER,
-        "primary_product_code": None,
-    },
-    {
-        "user_id": "emp_2026099",
-        "name": "관리자",
-        "role": UserRole.ADMIN,
-        "primary_product_code": None,
+        "employee_no": "299810",
+        "department": "후판마케팅실",
+        "email": "woong@posco.com",
     },
 ]
 
 
-# ── 담당자별 매핑 ─────────────────────────────────────────────────
-# user_id → 담당 customer_id 목록
+# ── ASSIGNMENTS ────────────────────────────────────────────────────
 ASSIGNMENTS: dict[str, list[str]] = {
-    "emp_2026003": [  # 박지은 (선재 5개)
-        "포스코인터내셔널",
+    "emp_2026003": [  # 박지은 (선재 5)
+        "포스코인터내셔널-선재",
         "고려제강",
         "Nissan Motor Co., Ltd",
         "New Best Wire Industrial Co., Ltd",
         "동일제강",
     ],
-    "emp_2026004": [  # 박현웅 (후판 5개)
+    "emp_2026004": [  # 박현웅 (후판 5)
         "현대중공업",
         "삼성중공업",
         "한화오션",
         "포스코건설",
-        "포스코인터내셔널",  # 박지은과 공유 (다른 제품)
-    ],
-    "emp_2026001": [  # 이윤진 (기존 6개)
-        "Borcelik Celik Sanayii VE Ticaret AS",
-        "Berg Steel Pipe Corp",
-        "썬시멘트주식회사",
-        "세아씨엠",
-        "JFE Techno Wire Corporation",
-        "Ningbo Dafeng Machinery Co., Ltd",
+        "포스코인터내셔널-후판",
     ],
 }
 

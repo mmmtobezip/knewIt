@@ -1,48 +1,71 @@
 'use client';
 
 import Link from 'next/link';
-import { User, RefreshCw, X } from 'lucide-react';
+import { User, RefreshCw, X, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useRef, useState, useEffect } from 'react';
 import { APP, REFRESH } from '@/shared/constants';
 import { Select } from '@/components/ui/select';
 import { useSelectionStore } from '@/stores/selection-store';
 import { useChatStore } from '@/stores/chat-store';
-import { useCustomerProfile, useInvalidateCache } from '@/lib/api/queries/dashboard';
+import {
+  useCatalogCustomers,
+  useCustomerProfile,
+  useInvalidateCache,
+  useUsersMe,
+} from '@/lib/api/queries/dashboard';
 import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import { toast } from '@/stores/toast-store';
 import { formatTime } from '@/shared/utils/format';
 import { cn } from '@/shared/utils/cn';
-import { PRODUCTS, CUSTOMERS } from '@/lib/msw/mocks/data';
+import { PRODUCTS } from '@/lib/msw/mocks/data';
+import { useAuthStore } from '@/stores/auth-store';
 
-const MOCK_USER = {
-  name: '김은지',
-  emp_no: 'pc012345',
-  email: 'pc012345@posco.com',
-  department: '후판마케팅실',
-  products: ['후판'],
-  customers: ['한화오션', '현대중공업', '삼성중공업', '포스코건설', '포스코인터내셔널'],
-};
+/** "포스코인터내셔널-후판" → "포스코인터내셔널" 표시명 정리. */
+function displayName(customerId: string): string {
+  const idx = customerId.lastIndexOf('-');
+  if (idx === -1) return customerId;
+  const suffix = customerId.slice(idx + 1);
+  if (['선재', '후판', 'HR', '냉연', 'STS', '부산물'].includes(suffix)) {
+    return customerId.slice(0, idx);
+  }
+  return customerId;
+}
 
 export function AppHeader({ subtitle }: { subtitle?: string }) {
   const pathname = usePathname();
+  const router = useRouter();
   const isGuidePage = pathname === '/guide';
 
   const { customerId, productCode, setCustomer, setProduct } = useSelectionStore();
   const startNewSession = useChatStore((s) => s.startNewSession);
   const invalidate = useInvalidateCache();
   const profileQuery = useCustomerProfile(customerId);
+  const meQuery = useUsersMe();
+  const me = meQuery.data;
+  const myCustomersQuery = useCatalogCustomers(me?.primary_product_code ?? null);
+
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
+  const setAuthUser = useAuthStore((s) => s.setUser);
 
-  const allowedProducts = profileQuery.data?.product_group ?? [];
-  const productOptions = PRODUCTS.filter(
-    (p) => allowedProducts.length === 0 || allowedProducts.includes(p.code),
-  ).map((p) => ({ value: p.code, label: p.name }));
-  const customerOptions = CUSTOMERS.slice()
-    .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
-    .map((c) => ({ value: c.id, label: c.name }));
+  // PRD 0523 — 제품 1:1: 사용자 primary 1개만 표시. 정적 PRODUCTS 카탈로그에 없는
+  // 값("선재" 등)이어도 그대로 옵션으로. primary 가 없는 사용자는 customer.product_group,
+  // 그것도 없으면 정적 PRODUCTS 전체 노출.
+  const myPrimary = me?.primary_product_code ?? null;
+  const productOptions: Array<{ value: string; label: string }> = myPrimary
+    ? [{ value: myPrimary, label: myPrimary }]
+    : (profileQuery.data?.product_group ?? PRODUCTS.map((p) => p.code)).map((code) => ({
+        value: code,
+        label: code,
+      }));
+
+  // PRD 0523 — 고객사 드롭다운: 사용자 권한 내 + product 매칭 5개만 (BE catalog 응답).
+  const customerOptions = (myCustomersQuery.data ?? [])
+    .slice()
+    .sort((a, b) => a.customer_id.localeCompare(b.customer_id, 'ko'))
+    .map((c) => ({ value: c.customer_id, label: displayName(c.customer_id) }));
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -79,6 +102,25 @@ export function AppHeader({ subtitle }: { subtitle?: string }) {
       },
     );
   }, REFRESH.DEBOUNCE_MS);
+
+  const handleLogout = () => {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem('auth-token');
+    setAuthUser(null as never);
+    setProfileOpen(false);
+    router.replace('/login');
+  };
+
+  // 프로필 표시용 fallback (로딩 중)
+  const displayUser = {
+    name: me?.name ?? '—',
+    initial: (me?.name ?? '?').slice(0, 1),
+    employee_no: me?.employee_no ?? '—',
+    email: me?.email ?? '—',
+    department: me?.department ?? '—',
+    product: me?.primary_product_code ?? '—',
+    customers: myCustomersQuery.data?.map((c) => displayName(c.customer_id)) ?? [],
+  };
 
   return (
     <header className="mb-4 flex items-center gap-3 rounded-3xl bg-white px-7 py-5">
@@ -156,17 +198,17 @@ export function AppHeader({ subtitle }: { subtitle?: string }) {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -8, scale: 0.96 }}
               transition={{ duration: 0.15 }}
-              className="absolute right-0 top-[calc(100%+8px)] z-50 w-72 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-lg"
+              className="absolute right-0 top-[calc(100%+8px)] z-50 w-80 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-lg"
             >
               {/* 헤더 */}
               <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-toss-blue text-[15px] font-extrabold text-white">
-                    {MOCK_USER.name[0]}
+                    {displayUser.initial}
                   </div>
                   <div>
-                    <div className="text-[15px] font-bold text-gray-900">{MOCK_USER.name}</div>
-                    <div className="text-[11px] text-gray-400">{MOCK_USER.department}</div>
+                    <div className="text-[15px] font-bold text-gray-900">{displayUser.name}</div>
+                    <div className="text-[11px] text-gray-400">{displayUser.department}</div>
                   </div>
                 </div>
                 <button
@@ -179,28 +221,41 @@ export function AppHeader({ subtitle }: { subtitle?: string }) {
 
               {/* 상세 정보 */}
               <div className="space-y-0 px-5 py-3">
-                <ProfileRow label="직번" value={MOCK_USER.emp_no} />
-                <ProfileRow label="이메일" value={MOCK_USER.email} />
-                <ProfileRow label="소속실" value={MOCK_USER.department} />
-                <ProfileRow
-                  label="판매제품"
-                  value={MOCK_USER.products.join(', ')}
-                />
+                <ProfileRow label="직번" value={displayUser.employee_no} />
+                <ProfileRow label="이메일" value={displayUser.email} />
+                <ProfileRow label="소속실" value={displayUser.department} />
+                <ProfileRow label="판매제품" value={displayUser.product} />
                 <div className="py-2">
                   <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
                     담당고객사
                   </div>
-                  <div className="flex flex-wrap gap-1">
-                    {MOCK_USER.customers.map((c) => (
-                      <span
-                        key={c}
-                        className="rounded-md bg-toss-blue-light px-2 py-0.5 text-[10px] font-semibold text-toss-blue"
-                      >
-                        {c}
-                      </span>
-                    ))}
-                  </div>
+                  {displayUser.customers.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {displayUser.customers.map((c) => (
+                        <span
+                          key={c}
+                          className="rounded-md bg-toss-blue-light px-2 py-0.5 text-[10px] font-semibold text-toss-blue"
+                        >
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-gray-400">로딩 중…</div>
+                  )}
                 </div>
+              </div>
+
+              {/* 로그아웃 */}
+              <div className="border-t border-gray-100 px-3 py-2">
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[13px] font-semibold text-gray-700 transition-colors hover:bg-gray-100"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  로그아웃
+                </button>
               </div>
             </motion.div>
           )}
@@ -212,11 +267,11 @@ export function AppHeader({ subtitle }: { subtitle?: string }) {
 
 function ProfileRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center gap-2 py-1.5">
+    <div className="flex items-start gap-2 py-1.5">
       <span className="w-14 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
         {label}
       </span>
-      <span className="text-[12px] text-gray-700">{value}</span>
+      <span className="break-all text-[12px] text-gray-700">{value}</span>
     </div>
   );
 }
