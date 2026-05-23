@@ -141,40 +141,41 @@ async def _upsert_indicators(rows: list[dict[str, Any]]) -> int:
     if not rows:
         return 0
     rows = _dedupe(rows)
+    # asyncpg 는 한 prepared statement 당 short int 한계로 ~32,767 parameters.
+    # 10 컬럼 × 1,000 행 = 10,000 params → chunk 단위 upsert.
+    chunk_size = 1000
     async with SessionLocal() as s:
-        stmt = insert(Indicator).values(rows).on_conflict_do_update(
-            index_elements=["feature_name", "date", "source"],
-            set_={
-                "value": insert(Indicator).excluded.value,
-                "unit": insert(Indicator).excluded.unit,
-                "cycle": insert(Indicator).excluded.cycle,
-                "country": insert(Indicator).excluded.country,
-                "category_big": insert(Indicator).excluded.category_big,
-                "category_mid": insert(Indicator).excluded.category_mid,
-                "category_small": insert(Indicator).excluded.category_small,
-            },
-        )
-        await s.execute(stmt)
+        for start in range(0, len(rows), chunk_size):
+            chunk = rows[start : start + chunk_size]
+            stmt = insert(Indicator).values(chunk).on_conflict_do_update(
+                index_elements=["feature_name", "date", "source"],
+                set_={
+                    "value": insert(Indicator).excluded.value,
+                    "unit": insert(Indicator).excluded.unit,
+                    "cycle": insert(Indicator).excluded.cycle,
+                    "country": insert(Indicator).excluded.country,
+                    "category_big": insert(Indicator).excluded.category_big,
+                    "category_mid": insert(Indicator).excluded.category_mid,
+                    "category_small": insert(Indicator).excluded.category_small,
+                },
+            )
+            await s.execute(stmt)
         await s.commit()
     return len(rows)
 
 
 async def main() -> None:
-    feature_filter = await _load_feature_filter()
-    if not feature_filter:
-        raise SystemExit("products 가 비어있습니다. 먼저 seed_customers.py 를 실행하세요.")
+    # PRD 0523 — 시트 전체 적재 (PRODUCT_CONFIG.key_features 필터 폐기).
+    # 메인 대시보드/AI 진단/LLM 프롬프트가 광범위한 지표를 참조할 수 있도록 시트의
+    # 모든 unique feature 를 indicators 테이블에 보존.
+    rows = list(_iter_xlsx_rows())
+    uniq = {r["feature_name"] for r in rows}
+    print(f"xlsx 전체 행: {len(rows)} / unique features: {len(uniq)}")
 
-    print(f"feature_filter ({len(feature_filter)} indicators):")
-    for f in sorted(feature_filter):
-        print(f"  - {f}")
-
-    matched = [r for r in _iter_xlsx_rows() if r["feature_name"] in feature_filter]
-    print(f"\nxlsx → 필터링된 행: {len(matched)}")
-
-    csv_files = _csv_dump(matched)
+    csv_files = _csv_dump(rows)
     print(f"CSV 저장: {csv_files} 개 파일 in {SETTINGS.indicators_csv_dir}")
 
-    inserted = await _upsert_indicators(matched)
+    inserted = await _upsert_indicators(rows)
     print(f"indicators upsert: {inserted} 행")
 
 
