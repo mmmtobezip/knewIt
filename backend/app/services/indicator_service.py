@@ -1,9 +1,10 @@
-"""PRD 0514 — 지표 변동률 + Top Mover + axis 다양성 보장.
+"""PRD 0523 — 지표 변동률 + Top Mover + 카테고리 다양성 보장.
 
 핵심:
 - D-1/W-1/M-1 변동률 계산
 - Score = |변동률| × key_feature_importance
-- Top-N 추출 (관점 다양성: 서로 다른 axis 최소 2개 커버)
+- Top-N 추출 (PRD 0514 5.1.2 Step 5 "관점 다양성") — indicators.category_big 으로
+  axis 대체. 서로 다른 카테고리 최소 2개 커버.
 - 외부 데이터가 static (xlsx 기준) 이므로 max_date 를 "오늘"로 간주 (#12 결정)
 """
 from __future__ import annotations
@@ -29,6 +30,10 @@ class IndicatorSnapshot:
     change_w1: float
     change_m1: float | None
     points: list[IndicatorPointOut] = field(default_factory=list)
+    # PRD 0523 — 시트 카테고리 (axis 대체 — questions/answer 다양성 보장용)
+    category_big: str | None = None
+    category_mid: str | None = None
+    category_small: str | None = None
 
 
 def _pct(current: float, baseline: float | None) -> float | None:
@@ -74,6 +79,9 @@ async def fetch_indicator(
         change_w1=w1 if w1 is not None else 0.0,
         change_m1=m1,
         points=points,
+        category_big=latest.category_big,
+        category_mid=latest.category_mid,
+        category_small=latest.category_small,
     )
 
 
@@ -89,11 +97,12 @@ async def fetch_series(
 async def top_movers_for_product(
     db: AsyncSession, product_code: str, *, top_n: int = 3
 ) -> tuple[list[TopMover], str]:
-    """PRD 0516 차트1.
+    """PRD 0523 차트1 + 추천 질문 (SMI-Bot v1.1 5.1.2 Step 5).
 
-    Score = |W-1 변동률| × key_feature_importance, score 내림차순 Top-N.
-    PRD 0516에서 axis 제거됨 → 단순 영향도 정렬.
-    반환: (top_movers, feature_name_of_max_score)
+    Score = |W-1 변동률| × key_feature_importance.
+    Top-N 추출 — indicators.category_big 다양성 보장:
+      먼저 서로 다른 category_big 으로 1개씩 채우고, 그 후 score 높은 backup 으로 보충.
+    이는 PRD 의 "5 관점 (원료/시장가격/수급/거시/전방) 중 최소 2 커버" 요건 충족.
     """
     product = await db.get(Product, product_code)
     if product is None:
@@ -101,7 +110,8 @@ async def top_movers_for_product(
     importance = product.key_feature_importance or []
     cycles = product.key_feature_cycle or []
 
-    candidates: list[TopMover] = []
+    # (mover, category_big) 쌍으로 수집 — 다양성 정렬용
+    candidates: list[tuple[TopMover, str | None]] = []
     for idx, feature in enumerate(product.key_features or []):
         weight = importance[idx] if idx < len(importance) else 0.0
         cycle = cycles[idx] if idx < len(cycles) else None
@@ -120,12 +130,28 @@ async def top_movers_for_product(
             series=snap.points,
             cycle=cycle,
         )
-        candidates.append(mover)
+        candidates.append((mover, snap.category_big))
 
-    candidates.sort(key=lambda m: m.score, reverse=True)
-    top = candidates[:top_n]
-    top_feature = top[0].indicator if top else ""
-    return top, top_feature
+    # score 내림차순 정렬 → 가장 강한 변동부터 검토
+    candidates.sort(key=lambda x: x[0].score, reverse=True)
+
+    # 카테고리 다양성: top_n 중 가능하면 서로 다른 category_big 우선
+    seen: set[str] = set()
+    primary: list[TopMover] = []
+    backup: list[TopMover] = []
+    for mover, cat in candidates:
+        if len(primary) >= top_n:
+            break
+        if cat and cat not in seen:
+            primary.append(mover)
+            seen.add(cat)
+        else:
+            backup.append(mover)
+    while len(primary) < top_n and backup:
+        primary.append(backup.pop(0))
+
+    top_feature = primary[0].indicator if primary else ""
+    return primary, top_feature
 
 
 __all__ = [
