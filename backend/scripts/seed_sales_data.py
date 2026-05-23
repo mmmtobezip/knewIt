@@ -51,6 +51,20 @@ async def _upsert(model, rows: list[dict[str, Any]], conflict: list[str]) -> int
     return len(rows)
 
 
+async def _replace(model, rows: list[dict[str, Any]]) -> int:
+    """전체 삭제 후 bulk insert. PG ON CONFLICT 가 NULL 컬럼(product)을 distinct
+    로 처리하기 때문에 sales_guides/sales_actuals 에는 upsert 대신 replace 사용."""
+    from sqlalchemy import delete
+    if not rows:
+        return 0
+    async with SessionLocal() as s:
+        await s.execute(delete(model))
+        for i in range(0, len(rows), CHUNK):
+            await s.execute(insert(model).values(rows[i:i + CHUNK]))
+        await s.commit()
+    return len(rows)
+
+
 # ─────────────────── per-CSV loaders ───────────────────
 
 
@@ -69,13 +83,20 @@ def _load_product_variants() -> list[dict[str, Any]]:
 
 
 def _load_sales(name: str, value_key: str, target_col: str) -> list[dict[str, Any]]:
-    """판매량_가이드.csv / 판매량_실적.csv 공통 로더 — 큰/중간 카테고리 + 값."""
-    out: dict[tuple[str, str, str], dict[str, Any]] = {}
+    """판매량_가이드.csv / 판매량_실적.csv 공통 로더.
+
+    스키마: 큰 카테고리, 중간 카테고리, 제품(NEW), <value_key>, 단위, 연도_월
+    "그룹별" 행은 제품=빈 문자열 → product=NULL.
+    "제품별"/"고객사별" 행은 product 채워짐 (고객사별 + 다제품 = split 결과).
+    """
+    out: dict[tuple[str, str, str | None, str], dict[str, Any]] = {}
     for r in _read_csv(name):
         cat_big = r["큰 카테고리"]
         cat_mid = r["중간 카테고리"]
+        product_raw = (r.get("제품") or "").strip()
+        product = product_raw or None
         ym = str(r["연도_월"]).strip()
-        key = (cat_big, cat_mid, ym)
+        key = (cat_big, cat_mid, product, ym)
         try:
             value = float(r[value_key])
         except (TypeError, ValueError):
@@ -83,6 +104,7 @@ def _load_sales(name: str, value_key: str, target_col: str) -> list[dict[str, An
         out[key] = {
             "category_big": cat_big,
             "category_mid": cat_mid,
+            "product": product,
             target_col: value,
             "unit": r.get("단위") or "천톤",
             "ym_str": ym,
@@ -160,8 +182,8 @@ async def main() -> None:
     print(f"shipments        : {len(sh)}")
 
     n_pv = await _upsert(ProductVariant, pv, ["variant_code", "variant_name"])
-    n_sg = await _upsert(SalesGuide, sg, ["category_big", "category_mid", "ym_str"])
-    n_sa = await _upsert(SalesActual, sa_, ["category_big", "category_mid", "ym_str"])
+    n_sg = await _replace(SalesGuide, sg)
+    n_sa = await _replace(SalesActual, sa_)
     n_ol = await _upsert(OrderLine, ol, ["order_line_no"])
     n_sh = await _upsert(Shipment, sh, ["order_line_no", "shipped_at"])
 

@@ -45,39 +45,54 @@ class ProductVariant(Base, TimestampMixin):
 
 
 class SalesGuide(Base, TimestampMixin):
-    """월별 판매량 가이드값 (큰카테고리: 그룹별/제품별/고객사별)."""
+    """월별 판매량 가이드값 (큰카테고리: 그룹별/제품별/고객사별).
+
+    product 컬럼 (nullable):
+      - "제품별" 행 → 항상 product=중간카테고리 (자기 자신, 일관성용)
+      - "고객사별" 행 → 단일제품 고객사는 product=고객사의 product,
+        다제품 고객사(포스코인터내셔널)는 행을 product 별로 split.
+      - "그룹별" 행 → NULL (전체 그룹 요약)
+    이로써 BE 가 (category_big='고객사별', category_mid=고객사, product=user.product)
+    로 정확한 행을 한 번에 매칭. customer_profile.product_group 우회 join 불필요.
+    """
 
     __tablename__ = "sales_guides"
     __table_args__ = (
         UniqueConstraint(
-            "category_big", "category_mid", "ym_str",
-            name="uq_sales_guide_cat_ym",
-        ),
-    )
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    category_big: Mapped[str] = mapped_column(String(16), nullable=False, index=True)   # 그룹별/제품별/고객사별
-    category_mid: Mapped[str] = mapped_column(String(128), nullable=False, index=True)  # 후판/한화오션 등
-    guide_value: Mapped[float] = mapped_column(Float, nullable=False)                   # 가이드값 (천톤)
-    unit: Mapped[str] = mapped_column(String(8), nullable=False, default="천톤")
-    ym_str: Mapped[str] = mapped_column(String(6), nullable=False, index=True)          # YYYYMM
-
-
-class SalesActual(Base, TimestampMixin):
-    """월별 판매량 실적 (전월까지). 당월은 shipments 에서 집계."""
-
-    __tablename__ = "sales_actuals"
-    __table_args__ = (
-        UniqueConstraint(
-            "category_big", "category_mid", "ym_str",
-            name="uq_sales_actual_cat_ym",
+            "category_big", "category_mid", "product", "ym_str",
+            name="uq_sales_guide_cat_prod_ym",
         ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     category_big: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
     category_mid: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
-    actual_value: Mapped[float] = mapped_column(Float, nullable=False)                  # 실적 (천톤)
+    product: Mapped[str | None] = mapped_column(String(32), index=True)                 # 선재/후판/HR(고로밀)/NULL
+    guide_value: Mapped[float] = mapped_column(Float, nullable=False)
+    unit: Mapped[str] = mapped_column(String(8), nullable=False, default="천톤")
+    ym_str: Mapped[str] = mapped_column(String(6), nullable=False, index=True)
+
+
+class SalesActual(Base, TimestampMixin):
+    """월별 판매량 실적 (전월까지). 당월은 shipments 에서 집계.
+
+    product 컬럼은 SalesGuide 와 동일 규칙. M3 focus_customers 가
+    shipments group by 의존을 폐기하고 sales_actuals.product 직접 필터로 전환.
+    """
+
+    __tablename__ = "sales_actuals"
+    __table_args__ = (
+        UniqueConstraint(
+            "category_big", "category_mid", "product", "ym_str",
+            name="uq_sales_actual_cat_prod_ym",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    category_big: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    category_mid: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    product: Mapped[str | None] = mapped_column(String(32), index=True)
+    actual_value: Mapped[float] = mapped_column(Float, nullable=False)
     unit: Mapped[str] = mapped_column(String(8), nullable=False, default="천톤")
     ym_str: Mapped[str] = mapped_column(String(6), nullable=False, index=True)
 
