@@ -4,46 +4,13 @@ import type {
   CacheInvalidateRequest,
   CacheInvalidateResponse,
   CustomerProfileResponse,
-  CustomersCatalogResponse,
   DashboardResponse,
   QuestionAnswerResponse,
   TodayQuestionsResponse,
-  UserMeResponse,
 } from '@/types';
 import { CACHE_POLICY } from '@/shared/constants';
 import { toast } from '@/stores/toast-store';
 import { ERROR_CODE_TO_MESSAGE } from '@/types';
-
-/**
- * PRD 0516 — 현재 사용자 (X-User-Id / Authorization 헤더 기반).
- */
-export function useUsersMe() {
-  return useQuery({
-    queryKey: ['users', 'me'],
-    staleTime: CACHE_POLICY.STALE_TIME_24H_MS,
-    queryFn: () =>
-      unwrap(apiClient.get('api/users/me').json<UserMeResponse>()).then((d) => d.user),
-  });
-}
-
-/**
- * PRD 0516 — 제품별 거래처 카탈로그 (lv2).
- * product 가 null 이면 사용자 매핑 전체 거래처 반환.
- */
-export function useCatalogCustomers(product: string | null | undefined) {
-  return useQuery({
-    queryKey: ['catalog', 'customers', product ?? '_all'],
-    staleTime: CACHE_POLICY.STALE_TIME_24H_MS,
-    queryFn: () =>
-      unwrap(
-        apiClient
-          .get('api/catalog/customers', {
-            searchParams: product ? { product } : undefined,
-          })
-          .json<CustomersCatalogResponse>(),
-      ).then((d) => d.customers),
-  });
-}
 
 /**
  * PRD 0514 — 통합 메인 대시보드 응답 (chart1 + chart2 + interpretation + strategy 일괄).

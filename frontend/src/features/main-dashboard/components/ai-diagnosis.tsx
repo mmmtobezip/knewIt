@@ -10,8 +10,8 @@ import { cn } from '@/shared/utils/cn';
  * AI 진단 (PRD 0518) — WHAT / WHY / IMPACT 구조화.
  *
  *  - WHAT  : headline 한 줄 + key_metrics 2~3 bullet
- *  - WHY   : 드라이버 3개 (rank, title, consequence)
- *  - IMPACT: direction 별 그룹화 + priority 색상 코드
+ *  - WHY   : 드라이버 3개 (rank, title, consequence) — 번호 ①②③
+ *  - IMPACT: direction 별 그룹화, 좌측 컬러 stripe
  */
 interface AiDiagnosisProps {
   interpretation: Interpretation | null;
@@ -116,7 +116,7 @@ function WhySection({ why }: { why: Interpretation['why'] }) {
   );
 }
 
-// ── IMPACT (direction 그룹 — priority 배지 미노출, 단순화) ─────
+// ── IMPACT (direction 그룹 — 좌측 stripe, 박스/배경 없음) ─────
 function ImpactSection({ impact }: { impact: ImpactItem[] }) {
   const groups: Record<ImpactItem['direction'], ImpactItem[]> = {
     증폭: [],

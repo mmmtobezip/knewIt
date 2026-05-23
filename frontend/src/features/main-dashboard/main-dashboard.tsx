@@ -1,14 +1,9 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { useSelectionStore } from '@/stores/selection-store';
-import {
-  useCatalogCustomers,
-  useCustomerProfile,
-  useDashboard,
-  useUsersMe,
-} from '@/lib/api/queries/dashboard';
-import { PRODUCTS } from '@/lib/msw/mocks/data';
+import { useCustomerProfile, useDashboard } from '@/lib/api/queries/dashboard';
+import { CUSTOMERS, PRODUCTS } from '@/lib/msw/mocks/data';
 import { QuickNav } from '@/components/layout/quick-nav';
 import { ChatPanel } from '@/components/chat/chat-panel';
 import { QuestionsPanel } from './components/questions-panel';
@@ -31,45 +26,27 @@ export function MainDashboard() {
   const { customerId, productCode, setCustomer, setProduct } = useSelectionStore();
   const profileQuery = useCustomerProfile(customerId);
 
-  // PRD 0516 — 현재 사용자가 담당하는 거래처 목록 (lv2)
-  const meQuery = useUsersMe();
-  const myPrimary = meQuery.data?.primary_product_code ?? null;
-  const myCustomersQuery = useCatalogCustomers(myPrimary);
-
-  // 사용자 변경 / 첫 진입 시 default customer 자동 선택:
-  //   - catalog 응답의 가나다순 첫 번째
-  //   - 박지은 → 고려제강 등 / 박현웅 → 삼성중공업 등
-  // 현재 customerId 가 catalog 안에 있으면 유지 (사용자가 직접 선택한 것)
-  const sortedCustomers = useMemo(
-    () =>
-      (myCustomersQuery.data ?? []).slice().sort((a, b) =>
-        a.customer_id.localeCompare(b.customer_id, 'ko'),
-      ),
-    [myCustomersQuery.data],
-  );
   useEffect(() => {
-    if (sortedCustomers.length === 0) return;
-    const inList = customerId
-      ? sortedCustomers.some((c) => c.customer_id === customerId)
-      : false;
-    if (!inList) {
-      setCustomer(sortedCustomers[0]!.customer_id);
+    const valid = CUSTOMERS.some((c) => c.id === customerId);
+    if (!customerId || !valid) {
+      const sorted = CUSTOMERS.slice().sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+      const first = sorted[0];
+      if (first) setCustomer(first.id);
     }
-  }, [sortedCustomers, customerId, setCustomer]);
+  }, [customerId, setCustomer]);
 
-  // product 자동 매칭 우선순위 (PRD 0516):
-  //   1순위: user.primary_product_code (1:1 매핑 — 박지은=선재, 박현웅=후판 절대 고정)
-  //          고객사를 어떻게 바꿔도 변하지 않음.
-  //   2순위: customer.product_group[0]  (primary 없는 사용자 — 이윤진 등)
-  //   3순위: PRODUCTS[0]                (profile 도 없는 초기 진입)
+  // 단일 product 자동 매칭 useEffect:
+  //   1순위: customer.product_group[0] (PRD § 4.1)
+  //   2순위: PRODUCTS[0] (profile 로딩 전 첫 진입용)
+  // target === productCode 일 때는 setState 호출하지 않아 무한 루프 방지
+  // (BACKLOG #9: "선재" 같이 PRODUCTS 카탈로그에 없는 product_group 값이 와도 그대로 보존)
   useEffect(() => {
-    const primary = meQuery.data?.primary_product_code;
     const fromProfile = profileQuery.data?.product_group?.[0];
-    const target = primary ?? fromProfile ?? PRODUCTS[0]?.code;
+    const target = fromProfile ?? PRODUCTS[0]?.code;
     if (target && target !== productCode) {
       setProduct(target);
     }
-  }, [meQuery.data, profileQuery.data, productCode, setProduct]);
+  }, [profileQuery.data, productCode, setProduct]);
 
   const dashboardQuery = useDashboard(customerId);
   const data = dashboardQuery.data;

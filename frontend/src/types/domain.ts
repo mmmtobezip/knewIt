@@ -137,19 +137,3 @@ export interface SessionUser {
   user_role: UserRole;
   name?: string;
 }
-
-// ── PRD 0516 — Users / Catalog ─────────────────────────
-export interface UserMe {
-  user_id: string;
-  name: string | null;
-  role: UserRole;
-  primary_product_code: string | null;
-  assigned_customers_count: number;
-}
-
-export interface CustomerCatalogItem {
-  customer_id: string;
-  industry: string;
-  market_region: string;
-  product_group: string[];
-}

@@ -44,20 +44,13 @@ export const CUSTOMERS = [
   { id: '동일제강', name: '동일제강' },
   { id: '세아씨엠', name: '세아씨엠' },
   { id: 'Ningbo Dafeng Machinery Co., Ltd', name: 'Ningbo Dafeng' },
-  // PRD 0516 신규 — 박지은(선재) + 박현웅(후판) 시연용
-  { id: '포스코인터내셔널', name: '포스코인터내셔널' },
-  { id: '현대중공업', name: '현대중공업' },
-  { id: '삼성중공업', name: '삼성중공업' },
-  { id: '한화오션', name: '한화오션' },
-  { id: '포스코건설', name: '포스코건설' },
 ] as const;
 
 export type CustomerId = (typeof CUSTOMERS)[number]['id'];
 
 export const PRODUCTS = [
-  { code: '선재', name: '선재' }, // PRD 0516 신규 (박지은 담당)
-  { code: '후판', name: '후판' },
   { code: 'HR(고로밀)', name: 'HR(고로밀)' },
+  { code: '후판', name: '후판' },
   { code: '냉연(CR)', name: '냉연(CR)' },
   { code: 'STS 304', name: 'STS 304' },
   { code: '부산물(철스크랩)', name: '부산물(철스크랩)' },
@@ -185,8 +178,8 @@ function makeSeries(start: number, drift: number, volatility: number, days = 30,
 // ─────────────────────────────────────────────
 
 /**
- * Mock 전용 Interpretation (PRD 0514 호환 — string what/why).
- * 실제 응답은 PRD 0518 구조화로 반환 — mock handler 가 변환.
+ * Mock 전용 Interpretation (옛 PRD 0514 string 형태).
+ * 실제 응답은 PRD 0518 구조화로 변환 — mock handler 가 mockInterpretationToReal 호출.
  */
 interface MockInterpretation {
   what: string;
@@ -204,7 +197,7 @@ interface ProductMarketData {
   interpretation: MockInterpretation;
 }
 
-/** Mock → 실제 Interpretation 구조 변환 (handler 용). */
+/** Mock string interpretation → BE 새 구조 (WhatBlock + WhyDriver + ImpactItem.priority) 변환. */
 export function mockInterpretationToReal(m: MockInterpretation): Interpretation {
   return {
     what: { headline: m.what, key_metrics: [] },
@@ -216,12 +209,6 @@ export function mockInterpretationToReal(m: MockInterpretation): Interpretation 
 }
 
 export const PRODUCT_MARKET_DATA: Record<ProductCode, ProductMarketData> = {
-  // PRD 0516 신규 — 박지은 시연용 선재 (MSW disabled 환경에선 미사용, 타입 만족용)
-  선재: {
-    top_movers: [],
-    cause_flow: [],
-    interpretation: { what: '', why: '', impact: [] },
-  },
   'HR(고로밀)': {
     top_movers: [
       {
@@ -770,8 +757,6 @@ export const STRATEGY_BY_CUSTOMER: Record<string, Strategy> = {
 // ─────────────────────────────────────────────
 
 export const TODAY_QUESTIONS_BY_PRODUCT: Record<ProductCode, TodayQuestion[]> = {
-  // PRD 0516 신규 — 박지은 시연용 선재 (MSW disabled 환경에선 미사용, 타입 만족용)
-  선재: [],
   'HR(고로밀)': [
     {
       qid: 'q-hr-1',

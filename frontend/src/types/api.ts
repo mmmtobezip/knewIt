@@ -3,14 +3,13 @@
  */
 
 import type {
-  CustomerCatalogItem,
   CustomerProfile,
   DashboardPayload,
   QuestionAnswer,
   TodayQuestionsPayload,
   TopMover,
-  UserMe,
 } from './domain';
+import type { SalesGuidePayload } from './sales-guide';
 
 export interface ApiMeta {
   request_id: string;
@@ -51,16 +50,13 @@ export interface ApiError {
 }
 
 export type CustomerProfileResponse = ApiResponse<{ customer_profile: CustomerProfile }>;
-export type UserMeResponse = ApiResponse<{ user: UserMe }>;
-export type CustomersCatalogResponse = ApiResponse<{
-  product: string | null;
-  customers: CustomerCatalogItem[];
-}>;
 export type DashboardResponse = ApiResponse<DashboardPayload>;
 export type TopMoversResponse = ApiResponse<{ product: string; top_movers: TopMover[] }>;
 export type TodayQuestionsResponse = ApiResponse<TodayQuestionsPayload>;
 export type QuestionAnswerResponse = ApiResponse<{ answer: QuestionAnswer }>;
 export type CacheInvalidateResponse = ApiResponse<{ invalidated_keys: string[] }>;
+
+export type SalesGuideResponse = ApiResponse<SalesGuidePayload>;
 
 export type CacheScope =
   | 'top_movers'
