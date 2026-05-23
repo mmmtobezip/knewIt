@@ -113,24 +113,33 @@ async def post_answer(
     if product is None:
         raise ApiException(ErrorCode.DATA_001, detail=f"product={body.product} 미정의")
 
-    async def _snapshot(feature: str) -> dict | None:
+    async def _snapshot(feature: str) -> tuple[dict, str | None] | None:
         snap = await fetch_indicator(db, feature)
         if snap is None:
             return None
-        return {
-            "indicator": feature,
-            "value": snap.latest_value,
-            "unit": snap.unit,
-            "change_w1": snap.change_w1,
-        }
+        return (
+            {
+                "indicator": feature,
+                "value": snap.latest_value,
+                "unit": snap.unit,
+                "change_w1": snap.change_w1,
+            },
+            snap.category_big,
+        )
 
     trigger_data: list[dict] = []
+    trigger_cats: set[str] = set()
     for f in body.trigger_indicators:
-        info = await _snapshot(f)
-        if info:
-            trigger_data.append(info)
+        pair = await _snapshot(f)
+        if pair is None:
+            continue
+        info, cat = pair
+        trigger_data.append(info)
+        if cat:
+            trigger_cats.add(cat)
 
-    # PRD 0516 — axis 폐기. 같은 product 의 importance Top-3 (trigger 제외) 사용.
+    # PRD 0523 — indicators.category_big 다양성 보장 (axis 대체).
+    # trigger 와 다른 category_big 을 우선 채우고, 부족하면 같은 category_big 의 importance 높은 지표로 보충.
     triggers_set = set(body.trigger_indicators)
     pairs = sorted(
         zip(
@@ -141,15 +150,26 @@ async def post_answer(
         key=lambda x: x[1],
         reverse=True,
     )
-    related_data: list[dict] = []
+    primary: list[dict] = []
+    backup: list[dict] = []
+    seen_cats: set[str] = set(trigger_cats)
     for feat, _imp in pairs:
         if feat in triggers_set:
             continue
-        info = await _snapshot(feat)
-        if info:
-            related_data.append(info)
-        if len(related_data) >= 3:
+        pair = await _snapshot(feat)
+        if pair is None:
+            continue
+        info, cat = pair
+        if cat and cat not in seen_cats:
+            primary.append(info)
+            seen_cats.add(cat)
+        else:
+            backup.append(info)
+        if len(primary) >= 3:
             break
+    related_data: list[dict] = primary[:3]
+    while len(related_data) < 3 and backup:
+        related_data.append(backup.pop(0))
 
     user_display = user.name or user.user_id
     llm = get_llm_service()
