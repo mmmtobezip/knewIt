@@ -288,32 +288,35 @@ async def _shipments_kt_by_customer(
 
 
 async def _guide_lookup(
-    db: AsyncSession, category_big: str, ym_str: str, product: str | None = None
+    db: AsyncSession, ym_str: str, product: str
 ) -> dict[str, float]:
-    """product 필터: 명시 시 해당 제품 행만, None 시 전체 (그룹별 등)."""
-    stmt = (
-        select(SalesGuide.category_mid, SalesGuide.guide_value)
-        .where(SalesGuide.category_big == category_big)
-        .where(SalesGuide.ym_str == ym_str)
-    )
-    if product is not None:
-        stmt = stmt.where(SalesGuide.product == product)
-    rows = (await db.execute(stmt)).all()
-    return {name: float(v) for name, v in rows}
+    """본인 제품의 해당 월 가이드값을 고객사별 dict 로 반환.
+
+    단일 행 단위 (판매그룹/제품/고객사) 스키마. 제품 전체 가이드는
+    호출자가 sum(values()) 로 계산.
+    """
+    rows = (
+        await db.execute(
+            select(SalesGuide.customer_name, SalesGuide.guide_value)
+            .where(SalesGuide.product == product)
+            .where(SalesGuide.ym_str == ym_str)
+        )
+    ).all()
+    return {c: float(v) for c, v in rows}
 
 
 async def _actual_lookup(
-    db: AsyncSession, category_big: str, ym_str: str, product: str | None = None
+    db: AsyncSession, ym_str: str, product: str
 ) -> dict[str, float]:
-    stmt = (
-        select(SalesActual.category_mid, SalesActual.actual_value)
-        .where(SalesActual.category_big == category_big)
-        .where(SalesActual.ym_str == ym_str)
-    )
-    if product is not None:
-        stmt = stmt.where(SalesActual.product == product)
-    rows = (await db.execute(stmt)).all()
-    return {name: float(v) for name, v in rows}
+    """본인 제품의 해당 월 실적값을 고객사별 dict 로 반환."""
+    rows = (
+        await db.execute(
+            select(SalesActual.customer_name, SalesActual.actual_value)
+            .where(SalesActual.product == product)
+            .where(SalesActual.ym_str == ym_str)
+        )
+    ).all()
+    return {c: float(v) for c, v in rows}
 
 
 async def compute_module1(
@@ -331,18 +334,15 @@ async def compute_module1(
 
     # 당월 출하 (천톤) — 본인 제품 한정 (variant_code → product 자동 분기)
     cust_actuals = await _shipments_kt_by_customer(db, salesperson, product, today)
-    # 가이드 lookup — product 컬럼으로 본인 제품 행만 정확히 매칭 (다제품 고객사 split 대응)
-    guide_by_product = await _guide_lookup(db, "제품별", ym_now, product=product)
-    guide_by_customer = await _guide_lookup(db, "고객사별", ym_now, product=product)
-    # 전년 동월 실적 lookup
-    actual_by_product_ly = await _actual_lookup(db, "제품별", ym_last_yr, product=product)
-    actual_by_customer_ly = await _actual_lookup(db, "고객사별", ym_last_yr, product=product)
+    # 단일 행 단위 lookup — 본인 제품의 모든 고객사 가이드/전년 실적을 dict 로
+    guide_by_customer = await _guide_lookup(db, ym_now, product)
+    actual_by_customer_ly = await _actual_lookup(db, ym_last_yr, product)
 
-    # ── 제품 KPI ──
-    product_guide = guide_by_product.get(product, 0.0)
+    # ── 제품 KPI ── (결함 4 정합: 분모 = 고객사 행 합산, 메타 행 제거)
+    product_guide = sum(guide_by_customer.values())
     product_actual = sum(cust_actuals.values())
     achievement_rate = (product_actual / product_guide) if product_guide else 0.0
-    ly_product = actual_by_product_ly.get(product, 0.0)
+    ly_product = sum(actual_by_customer_ly.values())
     yoy = ((product_actual - ly_product) / ly_product) if ly_product else 0.0
 
     kpi = AchievementKpi(
@@ -604,17 +604,14 @@ async def compute_module3(
     similar_periods: list[SimilarPeriod] = []
     for rank, (ym, cos_v) in enumerate(top3, start=1):
         year, month = int(ym[:4]), int(ym[4:6])
-        # 가이드 + 실적 — product 컬럼 필터 사용 (다제품 고객사 split 대응)
-        guide_lookup = await _guide_lookup(db, "제품별", ym, product=product)
-        actual_lookup = await _actual_lookup(db, "제품별", ym, product=product)
-        gv = guide_lookup.get(product, 0.0)
-        av = actual_lookup.get(product, 0.0)
+        # 단일 행 단위 — 고객사별 dict 로 받고 SUM 으로 제품 전체 산출.
+        guide_by_cust = await _guide_lookup(db, ym, product)
+        actual_by_cust = await _actual_lookup(db, ym, product)
+        gv = sum(guide_by_cust.values())
+        av = sum(actual_by_cust.values())
         rate = (av / gv) if gv else 0.0
-        # 집중 고객사 — sales_actuals 의 "고객사별" 행 (해당 제품) 내림차순.
-        # PRD 4.3.6 "유사 월의 출하실적 고객사별 중량 합계" 를 월별 집계 테이블로 해석.
-        # shipments group by 의존 폐기 → 합성 데이터 없이 sales_actuals 만으로 정상 동작.
-        cust_actuals_ym = await _actual_lookup(db, "고객사별", ym, product=product)
-        focus = [name for name, _ in sorted(cust_actuals_ym.items(), key=lambda x: x[1], reverse=True)]
+        # 집중 고객사 — 본인 제품 actual 내림차순 (sales_actuals 직접).
+        focus = [name for name, _ in sorted(actual_by_cust.items(), key=lambda x: x[1], reverse=True)]
         # 당시 시황 features
         market_features = [
             MarketFeature(name=f, value=f"{monthly_per_feature[f][ym]:.1f}")
