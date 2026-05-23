@@ -3,11 +3,14 @@
  */
 
 import type {
+  CustomerCatalogItem,
   CustomerProfile,
   DashboardPayload,
   QuestionAnswer,
   TodayQuestionsPayload,
   TopMover,
+  UserMe,
+  UserOut,
 } from './domain';
 import type { SalesGuidePayload } from './sales-guide';
 
@@ -50,6 +53,17 @@ export interface ApiError {
 }
 
 export type CustomerProfileResponse = ApiResponse<{ customer_profile: CustomerProfile }>;
+export type UserMeResponse = ApiResponse<{ user: UserMe }>;
+export type LoginResponse = ApiResponse<{ token: string; user: UserOut }>;
+export type CustomersCatalogResponse = ApiResponse<{
+  product: string | null;
+  customers: CustomerCatalogItem[];
+}>;
+
+export interface LoginRequest {
+  login_id: string;
+  password: string;
+}
 export type DashboardResponse = ApiResponse<DashboardPayload>;
 export type TopMoversResponse = ApiResponse<{ product: string; top_movers: TopMover[] }>;
 export type TodayQuestionsResponse = ApiResponse<TodayQuestionsPayload>;

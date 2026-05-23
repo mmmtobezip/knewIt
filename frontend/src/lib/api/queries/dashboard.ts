@@ -4,13 +4,64 @@ import type {
   CacheInvalidateRequest,
   CacheInvalidateResponse,
   CustomerProfileResponse,
+  CustomersCatalogResponse,
   DashboardResponse,
+  LoginRequest,
+  LoginResponse,
   QuestionAnswerResponse,
   TodayQuestionsResponse,
+  UserMeResponse,
 } from '@/types';
 import { CACHE_POLICY } from '@/shared/constants';
 import { toast } from '@/stores/toast-store';
 import { ERROR_CODE_TO_MESSAGE } from '@/types';
+
+/**
+ * PRD 0523 — 현재 사용자 프로필 (X-User-Id 헤더 또는 Authorization Bearer mock-token-XXX).
+ */
+export function useUsersMe(enabled = true) {
+  return useQuery({
+    queryKey: ['users', 'me'],
+    enabled,
+    staleTime: CACHE_POLICY.STALE_TIME_24H_MS,
+    queryFn: () =>
+      unwrap(apiClient.get('api/users/me').json<UserMeResponse>()).then((d) => d.user),
+  });
+}
+
+/**
+ * PRD 0516 — 사용자 권한 내 거래처 (product 필터 적용).
+ *  product=null 이면 본인 매핑 전체 거래처.
+ */
+export function useCatalogCustomers(product: string | null | undefined) {
+  return useQuery({
+    queryKey: ['catalog', 'customers', product ?? '_all'],
+    staleTime: CACHE_POLICY.STALE_TIME_24H_MS,
+    queryFn: () =>
+      unwrap(
+        apiClient
+          .get('api/catalog/customers', {
+            searchParams: product ? { product } : undefined,
+          })
+          .json<CustomersCatalogResponse>(),
+      ).then((d) => d.customers),
+  });
+}
+
+/**
+ * PRD 0523 — 로그인 (mock 비밀번호 "1234" 일괄).
+ *  사번(301096) 또는 user_id(emp_2026003) 둘 다 login_id 로 가능.
+ */
+export function useLogin() {
+  return useMutation({
+    mutationFn: async (body: LoginRequest) => {
+      const res = await apiClient
+        .post('api/auth/login', { json: body, timeout: 10_000 })
+        .json<LoginResponse>();
+      return unwrap(Promise.resolve(res));
+    },
+  });
+}
 
 /**
  * PRD 0514 — 통합 메인 대시보드 응답 (chart1 + chart2 + interpretation + strategy 일괄).

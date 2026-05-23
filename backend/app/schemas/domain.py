@@ -166,6 +166,9 @@ class SessionUser(BaseModel):
     user_role: UserRole
     name: str | None = None
     primary_product_code: str | None = None  # PRD 0516 — 담당자:제품 1:1 매핑
+    employee_no: str | None = None  # PRD 0523 — 사번
+    department: str | None = None  # PRD 0523 — 소속실
+    email: str | None = None  # PRD 0523 — 사내 이메일
 
 
 class UserOut(_ORMModel):
@@ -175,6 +178,9 @@ class UserOut(_ORMModel):
     name: str | None = None
     role: UserRole
     primary_product_code: str | None = None
+    employee_no: str | None = None
+    department: str | None = None
+    email: str | None = None
 
 
 class UserMe(UserOut):

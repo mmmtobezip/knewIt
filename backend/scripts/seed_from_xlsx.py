@@ -115,16 +115,13 @@ def _csv_dump(rows: list[dict[str, Any]]) -> int:
 
 
 async def _load_feature_filter() -> set[str]:
-    """PRD 0514 — products.key_features + axis 의 모든 지표를 평탄화."""
+    """PRD 0518 — products.key_features 평탄화 (axis 폐기)."""
     async with SessionLocal() as s:
         products = (await s.execute(select(Product))).scalars().all()
     features: set[str] = set()
     for p in products:
         for f in p.key_features or []:
             features.add(f)
-        for axis_grp in (p.axis or {}).values():
-            for ind in axis_grp.get("indicators", []) or []:
-                features.add(ind)
     return features
 
 

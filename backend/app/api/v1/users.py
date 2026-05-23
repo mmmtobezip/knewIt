@@ -51,6 +51,9 @@ async def get_me(
         name=user.name,
         role=user.user_role,
         primary_product_code=user.primary_product_code,
+        employee_no=user.employee_no,
+        department=user.department,
+        email=user.email,
         assigned_customers_count=int(count),
     )
     return ok(UserMeData(user=me))
