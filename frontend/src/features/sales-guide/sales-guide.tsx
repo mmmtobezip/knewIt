@@ -2,50 +2,54 @@
 
 import { useSelectionStore } from '@/stores/selection-store';
 import { useSalesGuide } from '@/lib/api/queries/sales-guide';
-import { AchievementSidebar } from './components/achievement-sidebar';
-import { OpportunityCard } from './components/opportunity-card';
-import { HistoryReportCard } from './components/history-report-card';
+import { AchievementSection } from './components/achievement-section';
+import { OpportunitySection } from './components/opportunity-section';
+import { HistorySection } from './components/history-section';
+import { TabNav } from './components/tab-nav';
+import { BackToTopButton } from './components/back-to-top';
 
 /**
- * 판매량 가이드 대시보드 (SCR-GUIDE-001).
+ * 판매량 가이드 대시보드 (SCR-GUIDE-001) — Tab-Based Vertical Layout.
  *
- * Layout C:
- *  - 좌 340px sticky: Module 1 (가이드값 달성률)
- *  - 우 flex-1 scroll: Module 2 (고객사 현황 & 기회 탐지) + Module 3 (과거 시황 학습 리포트)
+ *  - 상단 TabNav (sticky underline 탭)
+ *  - 세로 스택: AchievementSection → OpportunitySection → HistorySection
+ *  - 우하단 BackToTopButton
+ *
+ * 각 섹션은 좌측 4px 컬러 바 + kicker + 아이콘 + 헤딩으로 시각 정체성 구분.
+ *  - 01 ACHIEVEMENT  → 파랑
+ *  - 02 OPPORTUNITY  → 보라
+ *  - 03 HISTORY      → 시안
  */
 export function SalesGuide() {
   const { customerId } = useSelectionStore();
   const { data, isLoading } = useSalesGuide(customerId);
 
   return (
-    <div className="grid grid-cols-[340px_1fr] items-stretch gap-3">
-      {/* Module 1 — outer wrapper stretches to right column height; inner div sticks */}
-      <div>
-        <div className="sticky top-4 h-[calc(100vh-130px)]">
-          <AchievementSidebar
-            kpi={data?.achievement_kpi ?? null}
-            customers={data?.customer_achievements ?? []}
-            isLoading={isLoading}
-          />
-        </div>
-      </div>
+    <>
+      <TabNav />
 
-      {/* Right column */}
-      <div className="flex flex-col gap-3">
-        <OpportunityCard
+      <div className="flex flex-col gap-4 pb-20">
+        <AchievementSection
+          kpi={data?.achievement_kpi ?? null}
+          customers={data?.customer_achievements ?? []}
+          isLoading={isLoading}
+        />
+        <OpportunitySection
           signal={data?.market_signal ?? null}
           keyFeatures={data?.key_features ?? []}
           gradeSummary={data?.grade_summary ?? null}
           opportunities={data?.customer_opportunities ?? []}
           isLoading={isLoading}
         />
-        <HistoryReportCard
+        <HistorySection
           marketSummary={data?.market_summary ?? []}
           timeline={data?.similarity_timeline ?? []}
           similarPeriods={data?.similar_periods ?? []}
           isLoading={isLoading}
         />
       </div>
-    </div>
+
+      <BackToTopButton />
+    </>
   );
 }

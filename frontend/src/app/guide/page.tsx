@@ -4,16 +4,14 @@ import { SalesGuide } from '@/features/sales-guide/sales-guide';
 /**
  * 판매량 가이드 대시보드 (SCR-GUIDE-001).
  *
- * 메인 대시보드 QuickNav 의 "판매 가이드" 클릭 시 진입.
- * Layout C: 좌 sticky 사이드바(Module 1) + 우 스크롤 컬럼(Module 2 + 3).
+ * 루트 레이아웃의 main(max-w-[1500px] p-6)을 그대로 사용 →
+ * AppHeader, TabNav, 3개 섹션 카드가 모두 동일한 가로 폭으로 정렬됨.
  */
 export default function GuidePage() {
   return (
     <>
       <AppHeader subtitle="판매 가이드" />
-      <main className="mx-auto max-w-[1500px] px-4 pt-3 pb-[114px]">
-        <SalesGuide />
-      </main>
+      <SalesGuide />
     </>
   );
 }
