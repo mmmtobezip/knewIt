@@ -30,6 +30,9 @@ class AchievementKpi(BaseModel):
     actual_volume: float             # 천톤
     guide_volume: float              # 천톤
     volume_unit: str = "천톤"
+    # 참고용 — 판매그룹 전체 가이드 (시연 가상값). 내 책임 거래처 가이드가
+    # 전체의 일부임을 info tooltip 에 표시. 실 운영 시 sales_groups 테이블로 이관.
+    group_total_guide: float = 0.0
 
 
 class CustomerAchievement(BaseModel):
@@ -108,7 +111,9 @@ class SimilarityPoint(BaseModel):
 
 class MarketFeature(BaseModel):
     name: str
-    value: str                       # 표시 문자열
+    value: str                       # 당시 시점 값 (표시 문자열)
+    current_value: str | None = None # 현재 시점 값 — delta chip 비교용
+    delta_pct: float | None = None   # 현재 대비 과거 변화율 (%); past→current
 
 
 class SimilarPeriod(BaseModel):
@@ -122,6 +127,7 @@ class SimilarPeriod(BaseModel):
     achievement_rate: float
     focus_customers: list[str] = Field(default_factory=list)
     market_features: list[MarketFeature] = Field(default_factory=list)
+    insight: str | None = None       # 카드 하단 한 줄 액션 인사이트 (룰 기반)
 
 
 # ─────────────────── Unified Payload ───────────────────

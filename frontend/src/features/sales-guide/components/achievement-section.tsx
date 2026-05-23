@@ -58,9 +58,9 @@ export function AchievementSection({ kpi, customers, isLoading }: AchievementSec
           {/* 상단: KPI 2개 + 전체 진행 바 */}
           <div className="grid grid-cols-[1fr_1fr_2fr] gap-3">
             <KpiBox
-              label="후판 달성률"
+              label="내 담당 후판 달성률"
               value={`${Math.round(kpi.achievement_rate * 100)}%`}
-              sub="제품별 가이드값 대비"
+              sub="내 책임 거래처 5개 합산"
               valueClass={
                 kpi.achievement_rate >= 0.8
                   ? 'text-success'
@@ -77,7 +77,10 @@ export function AchievementSection({ kpi, customers, isLoading }: AchievementSec
             />
             <div className="flex flex-col justify-center rounded-xl bg-gray-100 px-5 py-4">
               <div className="mb-2 flex items-baseline justify-between">
-                <span className="text-[13px] font-bold text-gray-900">후판 전체 달성률</span>
+                <span className="flex items-center gap-1.5 text-[13px] font-bold text-gray-900">
+                  내 책임 거래처 합산 달성률
+                  <InfoTip text={`내 책임 5개 거래처 합산 기준\n• ${kpi.actual_volume} / ${kpi.guide_volume} 천톤${kpi.group_total_guide ? `\n• 후판판매그룹 전체 ${kpi.group_total_guide.toLocaleString()} 천톤의 ${((kpi.guide_volume / kpi.group_total_guide) * 100).toFixed(1)}%` : ''}`} />
+                </span>
                 <span className="text-[12px] text-gray-500">
                   {kpi.actual_volume} / {kpi.guide_volume} {kpi.volume_unit}
                 </span>
@@ -140,20 +143,42 @@ function KpiBox({
   value,
   sub,
   valueClass,
+  info,
 }: {
   label: string;
   value: string;
   sub: string;
   valueClass: string;
+  info?: string;
 }) {
   return (
     <div className="rounded-xl bg-gray-100 px-5 py-4">
-      <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">{label}</div>
+      <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+        <span>{label}</span>
+        {info && <InfoTip text={info} />}
+      </div>
       <div className={cn('text-[34px] font-extrabold leading-none tracking-tightest', valueClass)}>
         {value}
       </div>
       <div className="mt-1.5 text-[11px] text-gray-400">{sub}</div>
     </div>
+  );
+}
+
+/** info 아이콘 (i) — hover 시 계산 방법 tooltip popup (POSCO 정중 톤). */
+function InfoTip({ text }: { text: string }) {
+  return (
+    <span className="group relative inline-flex">
+      <span
+        aria-label="계산 방법"
+        className="inline-flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full border border-gray-300 bg-white text-[9px] font-bold text-gray-400 transition-colors hover:border-toss-blue hover:text-toss-blue"
+      >
+        i
+      </span>
+      <span className="invisible absolute left-1/2 top-full z-50 mt-1.5 w-[260px] -translate-x-1/2 whitespace-pre-line rounded-xl border border-gray-100 bg-white p-3 text-left text-[11px] leading-[1.6] font-normal normal-case tracking-normal text-gray-700 opacity-0 shadow-toss-md transition-all group-hover:visible group-hover:opacity-100">
+        {text}
+      </span>
+    </span>
   );
 }
 

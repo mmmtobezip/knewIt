@@ -2,39 +2,34 @@
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/shared/utils/cn';
-import type { MarketSummaryItem, SimilarityPoint, SimilarPeriod } from '@/types';
+import type { SimilarityPoint, SimilarPeriod } from '@/types';
 import { SectionCard, SectionHeader, SectionIcons } from './section-header';
 
 /**
  * Module 3 — 유사 과거 시황
  *
- *  - 현재 후판 시황 요약 (6-column)
  *  - 과거 시황 유사도 타임라인 (월별 막대)
  *  - 유사도 TOP 3 — 3-column 카드 (실적/시황/집중 고객사)
+ *
+ * 시연용 변경: "현재 후판 시황 (당월 평균)" 컴포넌트 제거 (Module 2 시황 영역과 중복).
  */
 
-const DIR_ICON: Record<string, string> = { UP: '↑', DOWN: '↓', FLAT: '—' };
-const DIR_TEXT: Record<string, string> = {
-  UP: 'text-danger',
-  DOWN: 'text-toss-blue',
-  FLAT: 'text-gray-400',
-};
 const RANK_BG = ['bg-warning', 'bg-gray-400', 'bg-amber-700'];
 
 interface HistorySectionProps {
-  marketSummary: MarketSummaryItem[];
   timeline: SimilarityPoint[];
   similarPeriods: SimilarPeriod[];
   isLoading?: boolean;
 }
 
 export function HistorySection({
-  marketSummary,
   timeline,
   similarPeriods,
   isLoading,
 }: HistorySectionProps) {
-  const maxScore = Math.max(...timeline.map((p) => p.score), 1);
+  // 현재 시점은 비교 대상이 아닌 *기준* 이므로 타임라인에서 제외 (시연 단순화)
+  const pastTimeline = timeline.filter((pt) => !pt.is_current);
+  const maxScore = Math.max(...pastTimeline.map((p) => p.score), 1);
 
   return (
     <SectionCard id="section-history" accent="sky">
@@ -48,46 +43,42 @@ export function HistorySection({
 
       {isLoading ? (
         <div className="space-y-4">
-          <Skeleton className="h-20" />
           <Skeleton className="h-32" />
           <Skeleton className="h-60" />
         </div>
       ) : (
         <div className="flex flex-col gap-6">
-          {/* 현재 시황 요약 */}
-          <div>
-            <SectionLabel>현재 후판 시황 (당월 평균)</SectionLabel>
-            <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-6">
-              {marketSummary.map((item) => (
-                <div key={item.name} className="rounded-xl bg-gray-100 px-3.5 py-3">
-                  <div className="mb-1.5 truncate text-[11px] text-gray-500">{item.name}</div>
-                  <div className={cn('text-[14px] font-extrabold', DIR_TEXT[item.direction])}>
-                    {DIR_ICON[item.direction]} {item.value}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* 유사도 타임라인 */}
+          {/* 유사도 타임라인 — 현재 시점 제외, 과거 11개월 비교 */}
           <div>
             <SectionLabel>과거 시황 유사도 타임라인</SectionLabel>
             <div className="flex w-full items-end gap-1.5" style={{ height: 120 }}>
-              {timeline.map((pt, i) => {
+              {pastTimeline.map((pt, i) => {
                 const h = Math.round((pt.score / maxScore) * 100);
+                // score 라벨은 Top 3 만 표시 (일반 구간은 시각 노이즈 회피)
+                const showScore = pt.highlighted;
                 return (
-                  <div key={i} className="flex flex-1 flex-col items-center gap-1.5">
+                  <div key={i} className="flex flex-1 flex-col items-center gap-1">
+                    {/* 막대 위 cos% 표시 */}
+                    <span
+                      className={cn(
+                        'h-3 text-[9px] font-bold leading-none',
+                        showScore ? 'text-toss-blue' : 'text-transparent',
+                      )}
+                    >
+                      {showScore ? `${Math.round(pt.score)}%` : '·'}
+                    </span>
                     <div
+                      title={`코사인 유사도 ${pt.score.toFixed(1)}%`}
                       className={cn(
                         'w-full rounded-t-[5px] transition-colors',
-                        pt.is_current ? 'bg-warning' : pt.highlighted ? 'bg-toss-blue' : 'bg-gray-200',
+                        pt.highlighted ? 'bg-toss-blue' : 'bg-gray-200',
                       )}
                       style={{ height: `${h}px`, minHeight: 4 }}
                     />
                     <span
                       className={cn(
                         'whitespace-nowrap text-[10px]',
-                        pt.is_current ? 'font-bold text-warning' : pt.highlighted ? 'font-bold text-toss-blue' : 'text-gray-400',
+                        pt.highlighted ? 'font-bold text-toss-blue' : 'text-gray-400',
                       )}
                     >
                       {pt.label}
@@ -98,8 +89,7 @@ export function HistorySection({
             </div>
             <div className="mt-4 flex gap-4 text-[11px] text-gray-500">
               <LegendDot bg="bg-toss-blue" text="Top 3 유사 시점" />
-              <LegendDot bg="bg-warning" text="현재 시점" />
-              <LegendDot bg="bg-gray-200" text="일반 구간" />
+              <LegendDot bg="bg-gray-200" text="일반 구간 (낮은 유사도)" />
             </div>
           </div>
 
@@ -169,10 +159,12 @@ function SimilarPeriodCard({ period }: { period: SimilarPeriod }) {
         />
       </div>
 
-      {/* 당시 시황 features 2-col grid (좁은 카드 폭에서도 표시 가능하도록 세로 정렬) */}
+      {/* 당시 시황 features — 현재 대비 delta chip 으로 비교 가능 */}
       {period.market_features?.length > 0 && (
         <div className="mb-4">
-          <div className="mb-2 text-[11px] font-semibold text-gray-500">당시 시황 ({period.period} 평균)</div>
+          <div className="mb-2 text-[11px] font-semibold text-gray-500">
+            당시 시황 ({period.period} 평균) · <span className="text-gray-400">현재 대비 변화</span>
+          </div>
           <div className="overflow-hidden rounded-xl border border-gray-100">
             {chunk(period.market_features, 2).map((pair, ri) => (
               <div
@@ -186,7 +178,10 @@ function SimilarPeriodCard({ period }: { period: SimilarPeriod }) {
                 {pair.map((f, ci) => (
                   <div key={ci} className="flex flex-col gap-1 px-3 py-2">
                     <span className="text-[11px] leading-tight text-gray-500">{f.name}</span>
-                    <span className="text-[13px] font-bold text-gray-900">{f.value}</span>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-[13px] font-bold text-gray-900">{f.value}</span>
+                      <DeltaChip delta={f.delta_pct ?? null} currentValue={f.current_value ?? null} />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -196,7 +191,7 @@ function SimilarPeriodCard({ period }: { period: SimilarPeriod }) {
       )}
 
       {/* 집중 고객사 */}
-      <div className="mt-auto flex flex-wrap items-center gap-1.5">
+      <div className="mb-3 flex flex-wrap items-center gap-1.5">
         <span className="mr-1 text-[11px] text-gray-400">집중 고객사 (중량 순)</span>
         {period.focus_customers.map((c, i) => (
           <span key={c} className="flex items-center gap-1">
@@ -207,7 +202,42 @@ function SimilarPeriodCard({ period }: { period: SimilarPeriod }) {
           </span>
         ))}
       </div>
+
+      {/* 한 줄 인사이트 (룰 기반, POSCO 정중 톤) — 영업담당자 다음 액션 안내 */}
+      {period.insight && (
+        <div className="mt-auto rounded-xl border border-toss-blue-light bg-toss-blue-bg px-3.5 py-2.5">
+          <div className="mb-0.5 text-[10px] font-extrabold uppercase tracking-wide text-toss-blue">
+            추천 액션
+          </div>
+          <div className="text-[12px] leading-[1.6] text-gray-700">{period.insight}</div>
+        </div>
+      )}
     </div>
+  );
+}
+
+/** 현재 대비 변화율 chip — past→current 차이. 절대값 1% 미만은 회색(중립). */
+function DeltaChip({
+  delta,
+  currentValue,
+}: {
+  delta: number | null;
+  currentValue: string | null;
+}) {
+  if (delta === null || currentValue === null) return null;
+  const abs = Math.abs(delta);
+  const tone =
+    abs < 1 ? 'bg-gray-100 text-gray-500'
+      : delta > 0 ? 'bg-red-50 text-danger'      // 현재가 더 큼 (상승) — 후판 가격 상승 시그널
+        : 'bg-toss-blue-bg text-toss-blue';       // 현재가 더 작음 (하락)
+  const sign = delta > 0 ? '↑' : delta < 0 ? '↓' : '—';
+  return (
+    <span
+      title={`현재 ${currentValue}`}
+      className={cn('rounded-md px-1.5 py-0.5 text-[10px] font-bold', tone)}
+    >
+      {sign} {abs.toFixed(1)}%
+    </span>
   );
 }
 

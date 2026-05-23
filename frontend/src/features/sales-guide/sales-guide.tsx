@@ -36,13 +36,11 @@ export function SalesGuide() {
         />
         <OpportunitySection
           signal={data?.market_signal ?? null}
-          keyFeatures={data?.key_features ?? []}
           gradeSummary={data?.grade_summary ?? null}
           opportunities={data?.customer_opportunities ?? []}
           isLoading={isLoading}
         />
         <HistorySection
-          marketSummary={data?.market_summary ?? []}
           timeline={data?.similarity_timeline ?? []}
           similarPeriods={data?.similar_periods ?? []}
           isLoading={isLoading}
