@@ -99,9 +99,7 @@ export function PriceChartCard({ topMovers, isLoading }: PriceChartCardProps) {
           <div className="mt-2 flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-gray-600">
-                <span className="truncate">
-                  {active.indicator} ({active.unit})
-                </span>
+                <span className="truncate">{active.indicator}</span>
                 {active.cycle && (
                   <span
                     className="inline-flex shrink-0 items-center rounded-md bg-gray-200 px-2 py-0.5 text-[11px] font-bold lowercase tracking-tight text-gray-700"
@@ -112,9 +110,12 @@ export function PriceChartCard({ topMovers, isLoading }: PriceChartCardProps) {
                   </span>
                 )}
               </div>
-              <div className="flex items-baseline">
+              <div className="flex items-baseline gap-1.5">
                 <span className="text-[40px] font-extrabold leading-none tracking-[-1px] text-gray-900">
                   {formatInt(active.value)}
+                </span>
+                <span className="text-[14px] font-semibold leading-none tracking-tight text-gray-500">
+                  {active.unit}
                 </span>
                 <span
                   className={cn(

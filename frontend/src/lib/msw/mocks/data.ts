@@ -177,10 +177,35 @@ function makeSeries(start: number, drift: number, volatility: number, days = 30,
 // 제품별 시장 데이터 (차트1 + 차트2 + 해석)
 // ─────────────────────────────────────────────
 
+/**
+ * Mock 전용 Interpretation (옛 PRD 0514 string 형태).
+ * 실제 응답은 PRD 0518 구조화로 변환 — mock handler 가 mockInterpretationToReal 호출.
+ */
+interface MockInterpretation {
+  what: string;
+  why: string;
+  impact: Array<{
+    risk_factor: string;
+    direction: '증폭' | '완화' | '중립';
+    reason: string;
+  }>;
+}
+
 interface ProductMarketData {
   top_movers: TopMover[];
   cause_flow: CauseFlowStep[];
-  interpretation: Interpretation;
+  interpretation: MockInterpretation;
+}
+
+/** Mock string interpretation → BE 새 구조 (WhatBlock + WhyDriver + ImpactItem.priority) 변환. */
+export function mockInterpretationToReal(m: MockInterpretation): Interpretation {
+  return {
+    what: { headline: m.what, key_metrics: [] },
+    why: m.why
+      ? [{ rank: 1, title: m.why.slice(0, 30), consequence: m.why.slice(30, 80) }]
+      : [],
+    impact: m.impact.map((i) => ({ ...i, priority: 'MEDIUM' as const })),
+  };
 }
 
 export const PRODUCT_MARKET_DATA: Record<ProductCode, ProductMarketData> = {
@@ -881,7 +906,7 @@ export function buildDashboardPayload(customerId: string): DashboardPayload {
     generated_at: nowIso(),
     chart1_top_movers: market.top_movers,
     chart2_cause_flow: market.cause_flow,
-    interpretation: market.interpretation,
+    interpretation: mockInterpretationToReal(market.interpretation),
     strategy,
   };
 }

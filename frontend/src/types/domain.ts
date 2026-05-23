@@ -56,16 +56,30 @@ export interface CauseFlowStep {
   evidence: FlowEvidence[];
 }
 
-// ── Interpretation (What/Why/Impact) ─────────────────────
+// ── Interpretation (What/Why/Impact) — PRD 0518 구조화 ──
+export interface WhatBlock {
+  headline: string;
+  key_metrics: string[];
+}
+
+export interface WhyDriver {
+  rank: number;
+  title: string;
+  consequence: string;
+}
+
+export type ImpactPriority = 'HIGH' | 'MEDIUM' | 'LOW';
+
 export interface ImpactItem {
   risk_factor: string;
   direction: '증폭' | '완화' | '중립';
+  priority: ImpactPriority;
   reason: string;
 }
 
 export interface Interpretation {
-  what: string;
-  why: string;
+  what: WhatBlock;
+  why: WhyDriver[];
   impact: ImpactItem[];
 }
 

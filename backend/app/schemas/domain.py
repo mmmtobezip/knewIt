@@ -64,6 +64,7 @@ class TopMover(BaseModel):
     change_m1: float | None = None
     score: float
     series: list[IndicatorPointOut] = Field(default_factory=list)
+    cycle: str | None = None  # "D" / "W" / "M" (PRD 0516 — FE 기간 탭 매칭용)
 
 
 # ── Cause Flow (메인 대시보드 차트2) ───────────────────────
@@ -81,15 +82,31 @@ class CauseFlowStep(BaseModel):
 
 
 # ── LLM 해석 (메인 대시보드 What/Why/Impact) ────────────────
+class WhatBlock(BaseModel):
+    """헤드라인 + key metrics (PRD 0518 AI 진단 시각 개편)."""
+
+    headline: str  # 80자 이내, 수치 강조
+    key_metrics: list[str] = Field(default_factory=list)  # 2~3 bullets, 각 40자 이내
+
+
+class WhyDriver(BaseModel):
+    """인과 드라이버 1개 (우선순위 순)."""
+
+    rank: int  # 1~3
+    title: str  # 30자 이내 (수치 + 사건 — 예: "중국 부동산 투자 -11.2% YoY")
+    consequence: str  # 50자 이내 (→ 결과)
+
+
 class ImpactItem(BaseModel):
     risk_factor: str
     direction: Literal["증폭", "완화", "중립"]
-    reason: str
+    priority: Literal["HIGH", "MEDIUM", "LOW"] = "MEDIUM"
+    reason: str  # 60자 이내
 
 
 class Interpretation(BaseModel):
-    what: str
-    why: str
+    what: WhatBlock
+    why: list[WhyDriver] = Field(min_length=1, max_length=3)
     impact: list[ImpactItem]
 
 
@@ -148,3 +165,26 @@ class SessionUser(BaseModel):
     user_id: str
     user_role: UserRole
     name: str | None = None
+    primary_product_code: str | None = None  # PRD 0516 — 담당자:제품 1:1 매핑
+
+
+class UserOut(_ORMModel):
+    """프로필 picker / /api/users 응답용 사용자 요약."""
+
+    user_id: str
+    name: str | None = None
+    role: UserRole
+    primary_product_code: str | None = None
+
+
+class UserMe(UserOut):
+    """현재 사용자 + 담당 거래처 수."""
+
+    assigned_customers_count: int
+
+
+class CustomerCatalogItem(_ORMModel):
+    customer_id: str
+    industry: str
+    market_region: str
+    product_group: list[str]
