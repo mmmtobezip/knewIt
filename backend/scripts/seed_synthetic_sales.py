@@ -1,29 +1,21 @@
-"""합성 출하/주문 데이터 생성기 — B2B 철강 영업 도메인 방법론 적용.
+"""합성 출하/주문 데이터 생성기 (당월 한정) — B2B 철강 영업 도메인 방법론.
 
 목적:
-    PRD 6.3 요구 "출하실적: 당월 + 과거 1년치 데이터 임의 생성" 충족.
-    영업판매 전문가가 보아도 위화감 없는 패턴 (시즌·분기말·요일·산업별 mix).
+    PRD 의 설계자 피드백 반영 — 과거 11개월은 sales_actuals 테이블이 담당
+    (월별 집계), 당월 실적만 shipments raw transaction 사용. 이 스크립트는
+    "당월(2026-05-01 ~ 시연 기준일 2026-05-15)" 영업 도메인 사실적 분포로 생성.
 
 적용 방법론 (Level 10):
-    ① Holt-Winters Triple Exponential Smoothing (Holt 1957, Winters 1960)
-       — 월별 시즌 인덱스로 trend × seasonality 결합.
-    ② Pareto / Power Law (Anderson Long Tail)
-       — 단건 weight 는 산업별 정규분포 + 일부 heavy-tail.
-    ③ Quarter-End Push (McKinsey B2B Pulse)
-       — 매월 마지막 5 영업일에 출하량 30% 집중. 3·6·9·12월말 가중.
-    ④ Weekday Effect (Steelmint 일별 출하 통계)
-       — 월요일 0.6 / 화수목 1.2-1.3 / 금 1.0.
-    ⑤ Industry Order Cycle Profile (Bosworth Solution Selling)
-       — 조선=sporadic 대형 / 트레이딩=다건 중형 / 가전=정기 소형.
-    ⑥ Achievement Rate Distribution (Korn Ferry Sales Effectiveness)
-       — 박지은(선재) / 박현웅(후판) 별 12개월 시나리오 (60~115%).
+    ① Holt-Winters Seasonal Index (Holt 1957) — 5월=1.0
+    ② Pareto / Power Law (Long Tail) — 단건 weight 정규분포 + 5% heavy-tail
+    ③ Quarter-End Push (McKinsey B2B Pulse) — 월말 5영업일 가중
+    ④ Weekday Effect (Steelmint) — 월 0.6 / 화수목 1.2-1.3 / 금 1.0
+    ⑤ Industry Order Cycle (Bosworth Solution Selling) — 산업별 단건 weight
+    ⑥ Achievement Rate (Korn Ferry) — 박지은 5월 0.61 / 박현웅 5월 0.71
     ⑦ Salesperson Performance Mix (Gartner Quota Attainment)
-       — 두 사람의 성과 패턴 차등 (박현웅 약간 우상향).
 
-생성 규모:
-    - 12개월 (2025-06 ~ 2026-05) × 9고객사 ≈ 1,000~1,200건/월 → 약 12,000건
-    - 단, 박지은/박현웅 1인 1제품 한정 → 실 사용 = 약 5,000~6,000건
-    - 5월은 시연 기준일(2026-05-15) 까지만 → 약 50% 데이터
+생성 규모 (5월 절반만):
+    약 80~120 건 (박지은 + 박현웅 합). 가이드 대비 30~70% 달성.
 
 실행: cd backend && uv run python -m scripts.seed_synthetic_sales [--dry-run]
 """
@@ -46,7 +38,7 @@ from app.models import OrderLine, Shipment
 random.seed(20260523)  # 결정론적 시드 — 시연 재현성
 
 DEMO_TODAY = DateT(2026, 5, 15)
-GEN_START = DateT(2025, 6, 1)     # 1년 전 6월
+GEN_START = DateT(2026, 5, 1)     # 당월 시작 (과거 11개월은 sales_actuals 가 담당)
 GEN_END = DEMO_TODAY              # 시연 기준일
 
 
