@@ -50,14 +50,16 @@ export function AppHeader({ subtitle }: { subtitle?: string }) {
   const profileRef = useRef<HTMLDivElement>(null);
   const setAuthUser = useAuthStore((s) => s.setUser);
 
-  // PRD 0523 — 제품 1:1: 사용자 primary 1개만. (없으면 customer.product_group fallback)
+  // PRD 0523 — 제품 1:1: 사용자 primary 1개만 표시. 정적 PRODUCTS 카탈로그에 없는
+  // 값("선재" 등)이어도 그대로 옵션으로. primary 가 없는 사용자는 customer.product_group,
+  // 그것도 없으면 정적 PRODUCTS 전체 노출.
   const myPrimary = me?.primary_product_code ?? null;
-  const productAllow: string[] | null = myPrimary
-    ? [myPrimary]
-    : profileQuery.data?.product_group ?? null;
-  const productOptions = PRODUCTS.filter(
-    (p) => productAllow === null || productAllow.includes(p.code),
-  ).map((p) => ({ value: p.code, label: p.name }));
+  const productOptions: Array<{ value: string; label: string }> = myPrimary
+    ? [{ value: myPrimary, label: myPrimary }]
+    : (profileQuery.data?.product_group ?? PRODUCTS.map((p) => p.code)).map((code) => ({
+        value: code,
+        label: code,
+      }));
 
   // PRD 0523 — 고객사 드롭다운: 사용자 권한 내 + product 매칭 5개만 (BE catalog 응답).
   const customerOptions = (myCustomersQuery.data ?? [])
