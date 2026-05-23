@@ -28,6 +28,7 @@ from app.models import (
     Indicator,
     OrderLine,
     Product,
+    ProductVariant,
     SalesActual,
     SalesGuide,
     Shipment,
@@ -249,10 +250,29 @@ async def collect_features(
 # ─────────────────── Module 1 — 달성률 ───────────────────
 
 
+def _variant_codes_for_product(product: str):
+    """제품(예: 선재/후판)에 해당하는 variant_code 의 distinct 서브쿼리.
+
+    PRD 결함 3 해결의 핵심:
+      product_variants 의 (variant_code, variant_name) composite PK 로 인해
+      동일 variant_code(예: WR)에 여러 variant_name(WA, WB)이 존재 → DISTINCT 필수.
+      이 서브쿼리로 출하실적/주문을 본인 제품 라인만 자동 분기.
+    """
+    return (
+        select(ProductVariant.variant_code)
+        .where(ProductVariant.product == product)
+        .distinct()
+    )
+
+
 async def _shipments_kt_by_customer(
-    db: AsyncSession, salesperson: str, today: DateT
+    db: AsyncSession, salesperson: str, product: str, today: DateT
 ) -> dict[str, float]:
-    """당월 (1일~today) 출하실적을 고객사별 천톤 합계로 반환."""
+    """당월 (1일~today) 출하실적을 *본인 제품* 한정으로 고객사별 천톤 합계 반환.
+
+    PRD 결함 3: 포스코인터내셔널 같은 다제품 고객사는 customer_profiles 가
+    단일 키로 통합되어 있고, variant_code 로 제품 분기 (HE/PJ→후판, WR→선재).
+    """
     month_first = today.replace(day=1)
     rows = (
         await db.execute(
@@ -260,6 +280,7 @@ async def _shipments_kt_by_customer(
             .join(OrderLine, OrderLine.order_line_no == Shipment.order_line_no)
             .where(OrderLine.salesperson == salesperson)
             .where(Shipment.shipped_at.between(month_first, today))
+            .where(Shipment.variant_code.in_(_variant_codes_for_product(product)))
             .group_by(Shipment.customer_name)
         )
     ).all()
@@ -305,8 +326,8 @@ async def compute_module1(
     last_year = DateT(today.year - 1, today.month, 1)
     ym_last_yr = f"{last_year.year}{last_year.month:02d}"
 
-    # 당월 출하 (천톤) — 고객사별
-    cust_actuals = await _shipments_kt_by_customer(db, salesperson, today)
+    # 당월 출하 (천톤) — 본인 제품 한정 (variant_code → product 자동 분기)
+    cust_actuals = await _shipments_kt_by_customer(db, salesperson, product, today)
     # 가이드 lookup
     guide_by_product = await _guide_lookup(db, "제품별", ym_now)
     guide_by_customer = await _guide_lookup(db, "고객사별", ym_now)
@@ -586,11 +607,12 @@ async def compute_module3(
         gv = guide_lookup.get(product, 0.0)
         av = actual_lookup.get(product, 0.0)
         rate = (av / gv) if gv else 0.0
-        # 집중 고객사 — 출하실적 합계 내림차순 (전체)
+        # 집중 고객사 — 본인 제품 출하 합계 내림차순 (variant_code 로 product 자동 분기)
         focus_rows = (
             await db.execute(
                 select(Shipment.customer_name, func.sum(Shipment.weight_kg).label("kg"))
                 .where(func.to_char(Shipment.shipped_at, "YYYYMM") == ym)
+                .where(Shipment.variant_code.in_(_variant_codes_for_product(product)))
                 .group_by(Shipment.customer_name)
                 .order_by(func.sum(Shipment.weight_kg).desc())
             )
