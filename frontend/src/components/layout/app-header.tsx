@@ -19,7 +19,7 @@ import { useDebouncedCallback } from '@/hooks/use-debounced-callback';
 import { toast } from '@/stores/toast-store';
 import { formatTime } from '@/shared/utils/format';
 import { cn } from '@/shared/utils/cn';
-import { PRODUCTS, CUSTOMERS } from '@/lib/msw/mocks/data';
+import { PRODUCTS } from '@/lib/msw/mocks/data';
 import { useAuthStore } from '@/stores/auth-store';
 
 /** "포스코인터내셔널-후판" → "포스코인터내셔널" 표시명 정리. */
@@ -50,13 +50,20 @@ export function AppHeader({ subtitle }: { subtitle?: string }) {
   const profileRef = useRef<HTMLDivElement>(null);
   const setAuthUser = useAuthStore((s) => s.setUser);
 
-  const allowedProducts = profileQuery.data?.product_group ?? [];
+  // PRD 0523 — 제품 1:1: 사용자 primary 1개만. (없으면 customer.product_group fallback)
+  const myPrimary = me?.primary_product_code ?? null;
+  const productAllow: string[] | null = myPrimary
+    ? [myPrimary]
+    : profileQuery.data?.product_group ?? null;
   const productOptions = PRODUCTS.filter(
-    (p) => allowedProducts.length === 0 || allowedProducts.includes(p.code),
+    (p) => productAllow === null || productAllow.includes(p.code),
   ).map((p) => ({ value: p.code, label: p.name }));
-  const customerOptions = CUSTOMERS.slice()
-    .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
-    .map((c) => ({ value: c.id, label: c.name }));
+
+  // PRD 0523 — 고객사 드롭다운: 사용자 권한 내 + product 매칭 5개만 (BE catalog 응답).
+  const customerOptions = (myCustomersQuery.data ?? [])
+    .slice()
+    .sort((a, b) => a.customer_id.localeCompare(b.customer_id, 'ko'))
+    .map((c) => ({ value: c.customer_id, label: displayName(c.customer_id) }));
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {

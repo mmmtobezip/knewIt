@@ -4,8 +4,11 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { LogIn } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLogin } from '@/lib/api/queries/dashboard';
 import { useAuthStore } from '@/stores/auth-store';
+import { useSelectionStore } from '@/stores/selection-store';
+import { useChatStore } from '@/stores/chat-store';
 import { toast } from '@/stores/toast-store';
 import { ApiClientError } from '@/lib/api/client';
 import { cn } from '@/shared/utils/cn';
@@ -27,6 +30,9 @@ export default function LoginPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const login = useLogin();
   const setUser = useAuthStore((s) => s.setUser);
+  const resetSelection = useSelectionStore((s) => s.reset);
+  const startNewChat = useChatStore((s) => s.startNewSession);
+  const qc = useQueryClient();
 
   // 이미 로그인 상태면 메인으로 리다이렉트
   useEffect(() => {
@@ -48,6 +54,10 @@ export default function LoginPage() {
         password: password.trim(),
       });
       localStorage.setItem('auth-token', result.token);
+      // 이전 사용자의 선택/채팅/캐시 모두 초기화 → 새 사용자 깨끗한 상태로
+      resetSelection();
+      startNewChat();
+      qc.clear();
       setUser({
         user_id: result.user.user_id,
         user_role: result.user.role,
