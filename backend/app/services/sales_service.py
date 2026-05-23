@@ -288,28 +288,31 @@ async def _shipments_kt_by_customer(
 
 
 async def _guide_lookup(
-    db: AsyncSession, category_big: str, ym_str: str
+    db: AsyncSession, category_big: str, ym_str: str, product: str | None = None
 ) -> dict[str, float]:
-    rows = (
-        await db.execute(
-            select(SalesGuide.category_mid, SalesGuide.guide_value)
-            .where(SalesGuide.category_big == category_big)
-            .where(SalesGuide.ym_str == ym_str)
-        )
-    ).all()
+    """product 필터: 명시 시 해당 제품 행만, None 시 전체 (그룹별 등)."""
+    stmt = (
+        select(SalesGuide.category_mid, SalesGuide.guide_value)
+        .where(SalesGuide.category_big == category_big)
+        .where(SalesGuide.ym_str == ym_str)
+    )
+    if product is not None:
+        stmt = stmt.where(SalesGuide.product == product)
+    rows = (await db.execute(stmt)).all()
     return {name: float(v) for name, v in rows}
 
 
 async def _actual_lookup(
-    db: AsyncSession, category_big: str, ym_str: str
+    db: AsyncSession, category_big: str, ym_str: str, product: str | None = None
 ) -> dict[str, float]:
-    rows = (
-        await db.execute(
-            select(SalesActual.category_mid, SalesActual.actual_value)
-            .where(SalesActual.category_big == category_big)
-            .where(SalesActual.ym_str == ym_str)
-        )
-    ).all()
+    stmt = (
+        select(SalesActual.category_mid, SalesActual.actual_value)
+        .where(SalesActual.category_big == category_big)
+        .where(SalesActual.ym_str == ym_str)
+    )
+    if product is not None:
+        stmt = stmt.where(SalesActual.product == product)
+    rows = (await db.execute(stmt)).all()
     return {name: float(v) for name, v in rows}
 
 
@@ -328,12 +331,12 @@ async def compute_module1(
 
     # 당월 출하 (천톤) — 본인 제품 한정 (variant_code → product 자동 분기)
     cust_actuals = await _shipments_kt_by_customer(db, salesperson, product, today)
-    # 가이드 lookup
-    guide_by_product = await _guide_lookup(db, "제품별", ym_now)
-    guide_by_customer = await _guide_lookup(db, "고객사별", ym_now)
-    # 전년 동월 실적 lookup (제품 + 고객사)
-    actual_by_product_ly = await _actual_lookup(db, "제품별", ym_last_yr)
-    actual_by_customer_ly = await _actual_lookup(db, "고객사별", ym_last_yr)
+    # 가이드 lookup — product 컬럼으로 본인 제품 행만 정확히 매칭 (다제품 고객사 split 대응)
+    guide_by_product = await _guide_lookup(db, "제품별", ym_now, product=product)
+    guide_by_customer = await _guide_lookup(db, "고객사별", ym_now, product=product)
+    # 전년 동월 실적 lookup
+    actual_by_product_ly = await _actual_lookup(db, "제품별", ym_last_yr, product=product)
+    actual_by_customer_ly = await _actual_lookup(db, "고객사별", ym_last_yr, product=product)
 
     # ── 제품 KPI ──
     product_guide = guide_by_product.get(product, 0.0)
@@ -601,23 +604,17 @@ async def compute_module3(
     similar_periods: list[SimilarPeriod] = []
     for rank, (ym, cos_v) in enumerate(top3, start=1):
         year, month = int(ym[:4]), int(ym[4:6])
-        # 가이드 + 실적
-        guide_lookup = await _guide_lookup(db, "제품별", ym)
-        actual_lookup = await _actual_lookup(db, "제품별", ym)
+        # 가이드 + 실적 — product 컬럼 필터 사용 (다제품 고객사 split 대응)
+        guide_lookup = await _guide_lookup(db, "제품별", ym, product=product)
+        actual_lookup = await _actual_lookup(db, "제품별", ym, product=product)
         gv = guide_lookup.get(product, 0.0)
         av = actual_lookup.get(product, 0.0)
         rate = (av / gv) if gv else 0.0
-        # 집중 고객사 — 본인 제품 출하 합계 내림차순 (variant_code 로 product 자동 분기)
-        focus_rows = (
-            await db.execute(
-                select(Shipment.customer_name, func.sum(Shipment.weight_kg).label("kg"))
-                .where(func.to_char(Shipment.shipped_at, "YYYYMM") == ym)
-                .where(Shipment.variant_code.in_(_variant_codes_for_product(product)))
-                .group_by(Shipment.customer_name)
-                .order_by(func.sum(Shipment.weight_kg).desc())
-            )
-        ).all()
-        focus = [name for name, _ in focus_rows]
+        # 집중 고객사 — sales_actuals 의 "고객사별" 행 (해당 제품) 내림차순.
+        # PRD 4.3.6 "유사 월의 출하실적 고객사별 중량 합계" 를 월별 집계 테이블로 해석.
+        # shipments group by 의존 폐기 → 합성 데이터 없이 sales_actuals 만으로 정상 동작.
+        cust_actuals_ym = await _actual_lookup(db, "고객사별", ym, product=product)
+        focus = [name for name, _ in sorted(cust_actuals_ym.items(), key=lambda x: x[1], reverse=True)]
         # 당시 시황 features
         market_features = [
             MarketFeature(name=f, value=f"{monthly_per_feature[f][ym]:.1f}")
