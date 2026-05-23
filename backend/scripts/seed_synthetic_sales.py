@@ -117,7 +117,7 @@ ACHIEVEMENT_SCENARIO: dict[tuple[str, int, int], float] = {
     ("박지은", 2026, 2): 0.82,
     ("박지은", 2026, 3): 0.95,
     ("박지은", 2026, 4): 0.92,
-    ("박지은", 2026, 5): 0.61,  # 시연 5/15 시점 (5/31 기준 평소 0.95 추세)
+    ("박지은", 2026, 5): 0.68,  # 시연 5/15 시점 — KPI ≈ 84% (정상=초록 노출)
     # 박현웅 (후판)
     ("박현웅", 2025, 6): 0.92,
     ("박현웅", 2025, 7): 0.80,
@@ -130,8 +130,54 @@ ACHIEVEMENT_SCENARIO: dict[tuple[str, int, int], float] = {
     ("박현웅", 2026, 2): 0.85,
     ("박현웅", 2026, 3): 1.08,
     ("박현웅", 2026, 4): 0.95,
-    ("박현웅", 2026, 5): 0.71,  # 시연 5/15 시점 (5/31 기준 평소 1.05 추세)
+    ("박현웅", 2026, 5): 0.74,  # 시연 5/15 시점 — KPI ≈ 81% (정상=초록 노출)
 }
+
+
+# ───────────────── 산업 특성 기반 고객사별 multiplier ─────────────────
+#
+# 시연용 등급 분포 (A=2 / B=3 / C=0) 를 *산업 특성에 맞는 자연스러운 흐름* 으로
+# 산출. base ach (위 ACHIEVEMENT_SCENARIO) × customer multiplier = 실제 ach.
+#
+# 박지은 (선재):
+#   - 고려제강       : 건설/인프라용 — 국내 인프라 투자 회복 시나리오 (1.51 → 92%)
+#   - New Best Wire  : 글로벌 부품 제조 — 글로벌 제조 PMI 반등 (1.44 → 88%)
+#   - 동일제강       : 건설/산업용 가공 — 국내 건설 둔화 영향 (1.15 → 70%)
+#   - Nissan Motor   : 완성차 — EV 전환 둔화로 부품 수요 정체 (1.07 → 65%)
+#   - 포스코인터내셔널: 글로벌 트레이딩 — 환율 변동성으로 거래 위축 (0.98 → 60%)
+#
+# 박현웅 (후판):
+#   - 한화오션       : 특수선/방산 — 글로벌 방산 호황 + LNG선 수주 (1.30 → 92%)
+#   - 삼성중공업     : LNG선 — LNG 가격 강세 + 신조선 수주 활성 (1.23 → 87%)
+#   - 현대중공업     : 조선 상선 — 컨테이너선 둔화 + 상선 마진 압박 (1.06 → 75%)
+#   - 포스코건설     : 플랜트 — 분양 시장 위축으로 신규 발주 감소 (0.99 → 70%)
+#   - 포스코인터내셔널: 트레이딩 — 글로벌 보호무역 + 환율 (0.85 → 60%)
+
+CUSTOMER_PERF_MULTIPLIER: dict[str, float] = {
+    # 박지은 5
+    "고려제강": 1.51,
+    "New Best Wire Industrial Co., Ltd": 1.44,
+    "동일제강": 1.15,
+    "Nissan Motor Co., Ltd": 1.07,
+    # 박현웅 5
+    "한화오션": 1.30,
+    "삼성중공업": 1.23,
+    "현대중공업": 1.06,
+    "포스코건설": 0.99,
+}
+# 포스코인터내셔널 (다제품) — salesperson 별로 다른 multiplier
+CUSTOMER_PERF_MULTIPLIER_BY_SP: dict[tuple[str, str], float] = {
+    ("박지은", "포스코인터내셔널"): 0.98,
+    ("박현웅", "포스코인터내셔널"): 0.85,
+}
+
+
+def customer_multiplier(salesperson: str, customer: str) -> float:
+    """고객사별 multiplier 조회 (포스코인터는 salesperson 으로 분기)."""
+    key = (salesperson, customer)
+    if key in CUSTOMER_PERF_MULTIPLIER_BY_SP:
+        return CUSTOMER_PERF_MULTIPLIER_BY_SP[key]
+    return CUSTOMER_PERF_MULTIPLIER.get(customer, 1.0)
 
 
 # ───────────────── Utility ─────────────────
@@ -196,13 +242,16 @@ def generate(profiles: list[CustomerProfile]) -> tuple[list[dict], list[dict]]:
 
         for prof in profiles:
             key = (prof.salesperson, y, m)
-            ach = ACHIEVEMENT_SCENARIO.get(key, 1.0)
+            base_ach = ACHIEVEMENT_SCENARIO.get(key, 1.0)
+            # 산업 특성 기반 customer multiplier 적용 — 등급 A=2 B=3 분포 + 자연스러운 흐름
+            ach = base_ach * customer_multiplier(prof.salesperson, prof.name)
             target_kt = prof.monthly_base_kt * season * ach
             target_kg = target_kt * 1_000_000
 
-            # 출하 건수 (Holt-Winters trend 반영)
+            # 출하 건수 (Holt-Winters trend 반영) — 건수 multiplier 는 1.0 부근으로 완만
+            order_scale = (1.0 + (ach - 1.0) * 0.5)  # 0.5x 완만화 (volume 증가 ≠ 건수 증가)
             n_orders = max(1, round(
-                random.randint(prof.monthly_orders_min, prof.monthly_orders_max) * season * ach
+                random.randint(prof.monthly_orders_min, prof.monthly_orders_max) * season * order_scale
             ))
 
             # 일자 분포 (영업일 × weekday × quarter-end 가중치)
