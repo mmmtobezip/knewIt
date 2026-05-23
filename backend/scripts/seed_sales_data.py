@@ -83,28 +83,29 @@ def _load_product_variants() -> list[dict[str, Any]]:
 
 
 def _load_sales(name: str, value_key: str, target_col: str) -> list[dict[str, Any]]:
-    """판매량_가이드.csv / 판매량_실적.csv 공통 로더.
+    """판매량_가이드.csv / 판매량_실적.csv 단일 행 단위 로더.
 
-    스키마: 큰 카테고리, 중간 카테고리, 제품(NEW), <value_key>, 단위, 연도_월
-    "그룹별" 행은 제품=빈 문자열 → product=NULL.
-    "제품별"/"고객사별" 행은 product 채워짐 (고객사별 + 다제품 = split 결과).
+    스키마: 판매그룹, 제품, 고객사, <value_key>, 단위, 연도_월
+    한 행 = "이 판매그룹의 이 제품을 이 고객사에 얼마(천톤)".
+    상위 집계는 BE 가 SUM() 으로 계산.
     """
-    out: dict[tuple[str, str, str | None, str], dict[str, Any]] = {}
+    out: dict[tuple[str, str, str, str], dict[str, Any]] = {}
     for r in _read_csv(name):
-        cat_big = r["큰 카테고리"]
-        cat_mid = r["중간 카테고리"]
-        product_raw = (r.get("제품") or "").strip()
-        product = product_raw or None
-        ym = str(r["연도_월"]).strip()
-        key = (cat_big, cat_mid, product, ym)
+        sg = r.get("판매그룹", "").strip()
+        product = r.get("제품", "").strip()
+        cust = r.get("고객사", "").strip()
+        ym = str(r.get("연도_월", "")).strip()
+        if not (sg and product and cust and ym):
+            continue
         try:
             value = float(r[value_key])
         except (TypeError, ValueError):
             continue
+        key = (sg, product, cust, ym)
         out[key] = {
-            "category_big": cat_big,
-            "category_mid": cat_mid,
+            "sales_group": sg,
             "product": product,
+            "customer_name": cust,
             target_col: value,
             "unit": r.get("단위") or "천톤",
             "ym_str": ym,

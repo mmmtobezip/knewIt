@@ -16,6 +16,7 @@ export interface AchievementKpi {
   actual_volume: number;
   guide_volume: number;
   volume_unit: string;
+  group_total_guide?: number;          // 판매그룹 전체 가이드 (info tooltip 참고용)
 }
 
 export interface CustomerAchievement {
@@ -99,7 +100,9 @@ export interface SimilarityPoint {
 
 export interface MarketFeature {
   name: string;
-  value: string;
+  value: string;                       // 당시 시점 값
+  current_value?: string | null;       // 현재 시점 값 (delta chip 비교용)
+  delta_pct?: number | null;           // 현재 대비 변화율 (%)
 }
 
 export interface SimilarPeriod {
@@ -113,6 +116,7 @@ export interface SimilarPeriod {
   achievement_rate: number;
   focus_customers: string[];
   market_features: MarketFeature[];
+  insight?: string | null;             // 카드 하단 한 줄 액션 인사이트
 }
 
 // ── Unified payload ───────────────────────────────────────

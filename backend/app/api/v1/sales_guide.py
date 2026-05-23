@@ -39,6 +39,7 @@ from app.services.cache_service import get_or_compute, make_key
 from app.services.llm_service import get_llm_service
 from app.services.sales_service import (
     DEMO_TODAY,
+    _actual_lookup,
     build_grade_summary,
     build_market_signal,
     build_opportunity,
@@ -186,25 +187,23 @@ class ProposalData(BaseModel):
 @router.post(
     "/sales-guide/proposal",
     response_model=ApiSuccess[ProposalData],
-    summary="PRD 4.2.7 — 고객사별 제안 시작 (3~4줄 행동지침)",
+    summary="PRD 4.2.7 — 고객사별 제안 시작 (4종 컨텍스트 → 3~4줄 행동지침)",
 )
 async def post_proposal(
     body: ProposalRequest,
     user: SessionUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ApiSuccess[ProposalData]:
-    """기존 strategy LLM (generate_strategy) 을 재사용해 3~4줄 행동지침 생성.
+    """PRD 4.2.7 — 4종 컨텍스트(고객사 프로필 + 실적 현황 + 시황 컨텍스트 + 과거 패턴)
+    를 모두 LLM 에 전달해 3~4줄 자연어 행동 지침 생성.
 
-    재사용 전략 (사용자 결정):
-      - generate_strategy 의 strategy_summary + recommended_actions[0:2]
-        를 결합해 단일 텍스트로 반환.
-      - 변동지표(indicator) = 시황영향이 가장 큰 key_feature 1개로 자동 선택.
-      - impact = customer.risk_factors → [{risk_factor, direction, priority, reason}].
+    전용 prompt(prompts/proposal.md) + temperature=0 + max_tokens=1000.
     """
     user_row = await db.get(User, user.user_id)
     if user_row is None or not user_row.primary_product_code:
         raise ApiException(ErrorCode.AUTH_001, detail="user.primary_product_code 미설정")
     product = user_row.primary_product_code
+    salesperson = user_row.name or user.user_id
 
     allowed_ids = set(await get_assigned_customer_ids(db, user.user_id, user.user_role))
     if body.customer not in allowed_ids:
@@ -213,46 +212,87 @@ async def post_proposal(
     if customer is None:
         raise ApiException(ErrorCode.DATA_001, detail=f"customer_profile={body.customer} 미정의")
 
-    # ── 컨텍스트 수집 — 시황 + 가장 큰 변동 지표 1개 ──
-    snapshots, _ = await collect_features(db, product)
+    # ── ② 실적 현황 (Module 1) ──
+    kpi, achievements = await compute_module1(
+        db, salesperson=salesperson, product=product, customers=[customer], today=DEMO_TODAY
+    )
+    ach = achievements[0] if achievements else None
+    achievement_rate_pct = (ach.achievement_rate * 100) if ach else 0.0
+    yoy_change_pct = (ach.yoy_change * 100) if ach else 0.0
+    actual_volume_kt = ach.actual_volume if ach else 0.0
+    guide_volume_kt = ach.guide_volume if ach else 0.0
+
+    # ── ③ 시황 컨텍스트 (Module 2) ──
+    snapshots, key_features_out = await collect_features(db, product)
     if not snapshots:
         raise ApiException(ErrorCode.DATA_001, detail="제안 컨텍스트용 지표 데이터 없음")
-    top = max(snapshots, key=lambda s: abs(s.change_pct))
-
-    # 기존 strategy 가 기대하는 impact 구조로 변환 (risk_factors 기반)
-    impact = [
-        {
-            "risk_factor": rf,
-            "direction": "증폭" if top.change_pct >= 0 else "완화",
-            "priority": "HIGH",
-            "reason": f"시황 변동 ({top.change_pct:+.2f}%) 가 {rf} 에 직접 영향",
-        }
-        for rf in (customer.risk_factors or [])[:2]
-    ] or [
-        {
-            "risk_factor": "—",
-            "direction": "중립",
-            "priority": "LOW",
-            "reason": "risk_factors 미등록",
-        }
-    ]
+    signal, market_signal_score = build_market_signal(snapshots, responsible=salesperson)
 
     llm = get_llm_service()
-    strategy = await llm.generate_strategy(
-        customer=customer.customer_id,
+    features_payload = [
+        {"name": s.name, "change_pct": round(s.change_pct, 2),
+         "cycle": s.cycle_char, "weight": s.weight}
+        for s in snapshots
+    ]
+    try:
+        impact_res = await llm.compute_market_impact(
+            product=product,
+            customer_industry=customer.industry or "—",
+            market_region=customer.market_region or "—",
+            sensitive_topics=list(customer.sensitive_topics or []),
+            features=features_payload,
+        )
+        customer_market_impact_pct = float(impact_res.get("market_score") or 0.0)
+    except Exception:
+        customer_market_impact_pct = 0.0
+
+    # ── ④ 과거 패턴 (Module 3) — 유사 Top 3 월 중 이 거래처가 등장한 곳 추출 ──
+    _, _, similar_periods = await compute_module3(db, product=product, today=DEMO_TODAY)
+    past_pattern: list[dict] = []
+    for sp in similar_periods:
+        if body.customer not in sp.focus_customers:
+            continue
+        # 해당 월 본인 제품 actual lookup 에서 이 고객사 값 추출
+        ym_str = sp.period.replace("년 ", "-").replace("월", "").strip()
+        # "2026-3" → "202603"
+        try:
+            year_part, month_part = ym_str.split("-")
+            ym_key = f"{int(year_part):04d}{int(month_part):02d}"
+        except ValueError:
+            continue
+        actuals_at_ym = await _actual_lookup(db, ym_key, product)
+        cust_actual = actuals_at_ym.get(body.customer)
+        if cust_actual is not None:
+            past_pattern.append({
+                "period": sp.period,
+                "cosine_similarity": sp.cosine_similarity,
+                "rank_in_focus": sp.focus_customers.index(body.customer) + 1,
+                "actual_volume_kt": round(cust_actual, 1),
+            })
+
+    # ── LLM 호출 ──
+    script = await llm.generate_proposal(
+        customer_name=customer.customer_id,
         industry=customer.industry or "—",
         market_region=customer.market_region or "—",
         sensitive_topics=list(customer.sensitive_topics or []),
         risk_factors=list(customer.risk_factors or []),
-        indicator=top.name,
-        change_rate=round(top.change_pct, 2),
-        impact=impact,
+        user_name=salesperson,
+        product=product,
+        achievement_rate_pct=achievement_rate_pct,
+        yoy_change_pct=yoy_change_pct,
+        actual_volume_kt=actual_volume_kt,
+        guide_volume_kt=guide_volume_kt,
+        market_signal_status=signal.status,
+        market_signal_score_pct=market_signal_score,
+        customer_market_impact_pct=customer_market_impact_pct,
+        key_features=[
+            {"name": k.name, "weight": k.weight,
+             "direction": k.direction, "change": k.change, "cycle": k.cycle}
+            for k in key_features_out
+        ],
+        past_pattern=past_pattern,
     )
-
-    # 3~4줄 행동지침으로 결합 (PRD 4.2.7 출력 형태: 인사말 없이 바로 지침)
-    actions = list(strategy.recommended_actions or [])[:3]
-    pieces = [strategy.strategy_summary.strip()] + actions
-    script = " ".join(p.strip().rstrip(".") + "." for p in pieces if p)
 
     return ok(ProposalData(
         customer=body.customer,

@@ -56,6 +56,14 @@ from app.schemas.sales_guide import (
 # 데이터가 정적(xlsx)이므로 "오늘" = indicator max_date 로 간주 (#12 결정)
 DEMO_TODAY = DateT(2026, 5, 15)
 
+# 판매그룹 전체 가이드 (시연 가상값) — 내 책임 거래처 가이드가 그룹의 일부임을
+# KPI info tooltip 에 표시하기 위한 참고값. 실 운영 시 sales_groups 테이블로 이관.
+GROUP_TOTAL_GUIDE: dict[str, float] = {
+    "후판": 1500.0,
+    "선재": 1200.0,
+    "HR(고로밀)": 2000.0,
+}
+
 
 # ─────────────────── Utility ───────────────────
 
@@ -288,32 +296,35 @@ async def _shipments_kt_by_customer(
 
 
 async def _guide_lookup(
-    db: AsyncSession, category_big: str, ym_str: str, product: str | None = None
+    db: AsyncSession, ym_str: str, product: str
 ) -> dict[str, float]:
-    """product 필터: 명시 시 해당 제품 행만, None 시 전체 (그룹별 등)."""
-    stmt = (
-        select(SalesGuide.category_mid, SalesGuide.guide_value)
-        .where(SalesGuide.category_big == category_big)
-        .where(SalesGuide.ym_str == ym_str)
-    )
-    if product is not None:
-        stmt = stmt.where(SalesGuide.product == product)
-    rows = (await db.execute(stmt)).all()
-    return {name: float(v) for name, v in rows}
+    """본인 제품의 해당 월 가이드값을 고객사별 dict 로 반환.
+
+    단일 행 단위 (판매그룹/제품/고객사) 스키마. 제품 전체 가이드는
+    호출자가 sum(values()) 로 계산.
+    """
+    rows = (
+        await db.execute(
+            select(SalesGuide.customer_name, SalesGuide.guide_value)
+            .where(SalesGuide.product == product)
+            .where(SalesGuide.ym_str == ym_str)
+        )
+    ).all()
+    return {c: float(v) for c, v in rows}
 
 
 async def _actual_lookup(
-    db: AsyncSession, category_big: str, ym_str: str, product: str | None = None
+    db: AsyncSession, ym_str: str, product: str
 ) -> dict[str, float]:
-    stmt = (
-        select(SalesActual.category_mid, SalesActual.actual_value)
-        .where(SalesActual.category_big == category_big)
-        .where(SalesActual.ym_str == ym_str)
-    )
-    if product is not None:
-        stmt = stmt.where(SalesActual.product == product)
-    rows = (await db.execute(stmt)).all()
-    return {name: float(v) for name, v in rows}
+    """본인 제품의 해당 월 실적값을 고객사별 dict 로 반환."""
+    rows = (
+        await db.execute(
+            select(SalesActual.customer_name, SalesActual.actual_value)
+            .where(SalesActual.product == product)
+            .where(SalesActual.ym_str == ym_str)
+        )
+    ).all()
+    return {c: float(v) for c, v in rows}
 
 
 async def compute_module1(
@@ -331,18 +342,15 @@ async def compute_module1(
 
     # 당월 출하 (천톤) — 본인 제품 한정 (variant_code → product 자동 분기)
     cust_actuals = await _shipments_kt_by_customer(db, salesperson, product, today)
-    # 가이드 lookup — product 컬럼으로 본인 제품 행만 정확히 매칭 (다제품 고객사 split 대응)
-    guide_by_product = await _guide_lookup(db, "제품별", ym_now, product=product)
-    guide_by_customer = await _guide_lookup(db, "고객사별", ym_now, product=product)
-    # 전년 동월 실적 lookup
-    actual_by_product_ly = await _actual_lookup(db, "제품별", ym_last_yr, product=product)
-    actual_by_customer_ly = await _actual_lookup(db, "고객사별", ym_last_yr, product=product)
+    # 단일 행 단위 lookup — 본인 제품의 모든 고객사 가이드/전년 실적을 dict 로
+    guide_by_customer = await _guide_lookup(db, ym_now, product)
+    actual_by_customer_ly = await _actual_lookup(db, ym_last_yr, product)
 
-    # ── 제품 KPI ──
-    product_guide = guide_by_product.get(product, 0.0)
+    # ── 제품 KPI ── (결함 4 정합: 분모 = 고객사 행 합산, 메타 행 제거)
+    product_guide = sum(guide_by_customer.values())
     product_actual = sum(cust_actuals.values())
     achievement_rate = (product_actual / product_guide) if product_guide else 0.0
-    ly_product = actual_by_product_ly.get(product, 0.0)
+    ly_product = sum(actual_by_customer_ly.values())
     yoy = ((product_actual - ly_product) / ly_product) if ly_product else 0.0
 
     kpi = AchievementKpi(
@@ -351,6 +359,7 @@ async def compute_module1(
         actual_volume=round(product_actual, 3),
         guide_volume=product_guide,
         volume_unit="천톤",
+        group_total_guide=GROUP_TOTAL_GUIDE.get(product, 0.0),
     )
 
     # ── 고객사 5개 ──
@@ -522,6 +531,20 @@ async def _monthly_avg(
     return {k: mean(vs) for k, vs in bucket.items()}
 
 
+def _build_period_insight(rate: float, focus: list[str]) -> str:
+    """유사 시점 카드 하단 한 줄 인사이트 (POSCO 정중 톤, 룰 기반).
+
+    영업담당자 다음 액션을 명시 — 당시 달성률 + 집중 고객사 1~2위로 결정.
+    """
+    top = focus[:2]
+    top_str = " · ".join(top) if top else "—"
+    if rate >= 1.0:
+        return f"당시 달성률 {rate * 100:.0f}% — 목표 초과 달성. {top_str} 우선 접근을 권장드립니다."
+    if rate >= 0.7:
+        return f"당시 달성률 {rate * 100:.0f}% — 목표 근접. {top_str} 우선 검토를 권장드립니다."
+    return f"당시 달성률 {rate * 100:.0f}% — 시그널 차이 분석이 필요해 보입니다. {top_str} 참고."
+
+
 def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     na = np.linalg.norm(a)
     nb = np.linalg.norm(b)
@@ -567,9 +590,10 @@ async def compute_module3(
     sigma[sigma == 0] = 1.0
     zmat = (matrix - mu) / sigma
 
-    # 4) 당월 벡터 = 가장 최근 ym (today 와 같거나 직전)
+    # 4) 당월 벡터 = today_ym 위치, 없으면 ym_sorted 의 가장 최근 월을 현재로 간주
     today_ym = f"{today.year}{today.month:02d}"
-    cur_idx = ym_sorted.index(today_ym) if today_ym in ym_sorted else len(ym_sorted) - 1
+    current_ym = today_ym if today_ym in ym_sorted else ym_sorted[-1]
+    cur_idx = ym_sorted.index(current_ym)
     cur_vec = zmat[cur_idx]
 
     # 5) 과거 벡터들 (cur_idx 제외) 와 코사인 유사도
@@ -579,58 +603,74 @@ async def compute_module3(
             continue
         sims.append((y, cosine_similarity(cur_vec, zmat[i])))
 
-    # 6) timeline (전체 ym, 점수 0~100 스케일)
+    # 6) timeline — score = 코사인 유사도 % (0~100). label 은 yy.mm 통일.
+    #    PRD 4.3.4 "월 단위 코사인 유사도 명시" 정합. 이전엔 Top 3 가
+    #    max_score 를 차지해 일반 구간 막대가 보이지 않던 문제 해소.
+    #    현재 시점은 score=100 (자기 자신과의 유사도 1.0 의미) + 별도 마커.
     timeline: list[SimilarityPoint] = []
-    max_score = max((s for _, s in sims), default=1.0)
     top_yms = {y for y, _ in sorted(sims, key=lambda x: x[1], reverse=True)[:3]}
     for y in ym_sorted:
-        if y == today_ym:
-            score_v = 30.0  # 현재는 별도 표시
-            label = f"{y[2:4]}.{y[4:6]}▸"
-            timeline.append(SimilarityPoint(label=label, score=score_v, highlighted=False, is_current=True))
+        label = f"{y[2:4]}.{y[4:6]}"            # yy.mm 통일
+        if y == current_ym:
+            timeline.append(SimilarityPoint(
+                label=label, score=100.0,
+                highlighted=False, is_current=True,
+            ))
         else:
             cos_val = next((v for k, v in sims if k == y), 0.0)
-            score_v = round((cos_val / max_score) * 80, 1) if max_score else 0.0
-            label = f"{y[2:4]}.{y[4:6]}" if y[:4] != today_ym[:4] else y[4:6].lstrip("0")
             timeline.append(SimilarityPoint(
                 label=label,
-                score=max(0.0, score_v),
+                score=round(max(0.0, cos_val) * 100, 1),
                 highlighted=(y in top_yms),
                 is_current=False,
             ))
+
+    # 6-2) 현재 시점의 시황 절대값 (당월 평균) — 카드의 delta chip 비교용
+    current_values: dict[str, float] = {
+        f: monthly_per_feature[f][current_ym] for f in feature_names
+    }
 
     # 7) Top 3 SimilarPeriod 카드
     top3 = sorted(sims, key=lambda x: x[1], reverse=True)[:3]
     similar_periods: list[SimilarPeriod] = []
     for rank, (ym, cos_v) in enumerate(top3, start=1):
         year, month = int(ym[:4]), int(ym[4:6])
-        # 가이드 + 실적 — product 컬럼 필터 사용 (다제품 고객사 split 대응)
-        guide_lookup = await _guide_lookup(db, "제품별", ym, product=product)
-        actual_lookup = await _actual_lookup(db, "제품별", ym, product=product)
-        gv = guide_lookup.get(product, 0.0)
-        av = actual_lookup.get(product, 0.0)
+        # 단일 행 단위 — 고객사별 dict 로 받고 SUM 으로 제품 전체 산출.
+        guide_by_cust = await _guide_lookup(db, ym, product)
+        actual_by_cust = await _actual_lookup(db, ym, product)
+        gv = sum(guide_by_cust.values())
+        av = sum(actual_by_cust.values())
         rate = (av / gv) if gv else 0.0
-        # 집중 고객사 — sales_actuals 의 "고객사별" 행 (해당 제품) 내림차순.
-        # PRD 4.3.6 "유사 월의 출하실적 고객사별 중량 합계" 를 월별 집계 테이블로 해석.
-        # shipments group by 의존 폐기 → 합성 데이터 없이 sales_actuals 만으로 정상 동작.
-        cust_actuals_ym = await _actual_lookup(db, "고객사별", ym, product=product)
-        focus = [name for name, _ in sorted(cust_actuals_ym.items(), key=lambda x: x[1], reverse=True)]
-        # 당시 시황 features
-        market_features = [
-            MarketFeature(name=f, value=f"{monthly_per_feature[f][ym]:.1f}")
-            for f in feature_names
-        ]
+        # 집중 고객사 — 본인 제품 actual 내림차순 (sales_actuals 직접).
+        focus = [name for name, _ in sorted(actual_by_cust.items(), key=lambda x: x[1], reverse=True)]
+        # 당시 시황 features — 현재 대비 delta chip 비교용 current_value + delta_pct
+        market_features: list[MarketFeature] = []
+        for f in feature_names:
+            past = monthly_per_feature[f][ym]
+            cur = current_values.get(f)
+            delta = ((cur - past) / past * 100) if (cur is not None and past) else None
+            market_features.append(MarketFeature(
+                name=f,
+                value=f"{past:.1f}",
+                current_value=f"{cur:.1f}" if cur is not None else None,
+                delta_pct=round(delta, 1) if delta is not None else None,
+            ))
+
+        # 한 줄 인사이트 (룰 기반, POSCO 정중 톤) — 영업담당자 다음 액션 명시
+        insight = _build_period_insight(rate, focus)
+
         similar_periods.append(SimilarPeriod(
             rank=rank,
             period=f"{year}년 {month}월",
             cosine_similarity=round(cos_v, 2),
-            description="—",  # POC: LLM 없이 빈 설명
+            description="—",
             tags=[],
             actual_volume=round(av, 1),
             guide_volume=round(gv, 1),
             achievement_rate=round(rate, 2),
             focus_customers=focus,
             market_features=market_features,
+            insight=insight,
         ))
 
     # 8) 현재 시황 요약 (FE Module 3 상단)

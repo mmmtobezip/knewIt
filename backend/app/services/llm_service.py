@@ -432,6 +432,80 @@ class LLMService:
         return {"directions": directions, "market_score": score}
 
 
+    async def generate_proposal(
+        self,
+        *,
+        customer_name: str,
+        industry: str,
+        market_region: str,
+        sensitive_topics: list[str],
+        risk_factors: list[str],
+        user_name: str,
+        product: str,
+        achievement_rate_pct: float,
+        yoy_change_pct: float,
+        actual_volume_kt: float,
+        guide_volume_kt: float,
+        market_signal_status: str,
+        market_signal_score_pct: float,
+        customer_market_impact_pct: float,
+        key_features: list[dict],
+        past_pattern: list[dict] | None = None,
+    ) -> str:
+        """PRD 4.2.7 — 제안 시작 기능. 4종 컨텍스트(고객사/실적/시황/과거) 기반 3~4줄 행동 지침.
+
+        PRD 명시:
+          - 모델: claude-sonnet-4-20250514 (settings.llm_model 사용)
+          - max_tokens: 1000
+          - 출력: 3~4줄 자연어 (인사말 없이 지침만)
+          - 호출 직접: free-form text (tool_use 미사용, BLUF 단락 보장이 핵심)
+          - temperature=0 (재현성)
+        """
+        prompt = _render(
+            _load_prompt("proposal"),
+            customer_name=customer_name,
+            industry=industry or "—",
+            market_region=market_region or "—",
+            sensitive_topics_json=_to_json(sensitive_topics),
+            risk_factors_json=_to_json(risk_factors),
+            user_name=user_name,
+            product=product,
+            achievement_rate_pct=f"{achievement_rate_pct:.1f}",
+            yoy_change_pct=f"{yoy_change_pct:+.1f}",
+            actual_volume_kt=f"{actual_volume_kt:.1f}",
+            guide_volume_kt=f"{guide_volume_kt:.1f}",
+            market_signal_status=market_signal_status,
+            market_signal_score_pct=f"{market_signal_score_pct:+.2f}",
+            customer_market_impact_pct=f"{customer_market_impact_pct:+.2f}",
+            key_features_json=_to_json(key_features),
+            past_pattern_json=_to_json(past_pattern or []),
+        )
+        try:
+            resp = await self.client.messages.create(
+                model=self.model,
+                max_tokens=1000,
+                temperature=0,
+                messages=[{"role": "user", "content": prompt}],
+            )
+        except anthropic.APITimeoutError as e:
+            raise ApiException(ErrorCode.LLM_002) from e
+        except anthropic.RateLimitError as e:
+            raise ApiException(ErrorCode.LLM_003) from e
+        except anthropic.APIError as e:
+            logger.exception("anthropic api error (proposal)")
+            raise ApiException(ErrorCode.LLM_001, detail=str(e)) from e
+
+        text = "".join(
+            b.text for b in resp.content if getattr(b, "type", None) == "text"
+        ).strip()
+        # 인사말 prefix 방어 후처리 (PRD: 인사말 절대 금지)
+        for bad in (f"{user_name} 담당자님, ", f"{user_name} 담당자님,",
+                    "안녕하세요. ", "안녕하세요, ", "안녕하세요"):
+            if text.startswith(bad):
+                text = text[len(bad):].lstrip()
+        return text
+
+
 _llm: LLMService | None = None
 
 
