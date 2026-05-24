@@ -17,11 +17,15 @@ interface TabItem {
   label: string;
 }
 
-const TABS = [
-  { id: 'section-achievement', label: '가이드값 달성률' },
-  { id: 'section-opportunity', label: '기회탐지' },
-  { id: 'section-history', label: '유사 과거 시황' },
-] as const satisfies readonly TabItem[];
+function buildTabs(product: string): readonly TabItem[] {
+  return [
+    // { id: 'section-achievement', label: '가이드값 달성률' },
+    { id: 'section-achievement', label: '당월 판매량 가이드값 확인' },
+    { id: 'section-market', label: `${product || '제품'} 관련 시황 한눈에 보기` },
+    { id: 'section-opportunity', label: '기회탐지' },
+    { id: 'section-history', label: '유사 과거 시황' },
+  ];
+}
 
 /* 스크롤 보정값:
  * - sticky top 8px
@@ -31,7 +35,8 @@ const TABS = [
  */
 export const TAB_SCROLL_OFFSET = 76;
 
-export function TabNav() {
+export function TabNav({ product = '' }: { product?: string }) {
+  const TABS = buildTabs(product);
   const [activeId, setActiveId] = useState<string>(TABS[0].id);
 
   /* 스크롤 위치에 따라 active 자동 갱신 */

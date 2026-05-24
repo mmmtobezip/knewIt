@@ -29,6 +29,8 @@ export interface CustomerAchievement {
   volume_unit: string;
   yoy_change: number;
   status: AchievementStatus;
+  prev_achievement_rate?: number;
+  yoy_label?: string;
 }
 
 // ── Module 2 ─────────────────────────────────────────────
@@ -43,6 +45,11 @@ export interface MarketSignal {
 export type FeatureCycle = 'DAILY' | 'WEEKLY' | 'MONTHLY';
 export type FeatureDirection = 'UP' | 'DOWN' | 'FLAT';
 
+export interface IndicatorPoint {
+  date: string;
+  value: number;
+}
+
 export interface KeyFeature {
   rank: number;
   name: string;
@@ -50,6 +57,10 @@ export interface KeyFeature {
   direction: FeatureDirection;
   change: string;
   cycle: FeatureCycle;
+  current_value?: string | null;
+  current_date?: string | null;
+  unit?: string;
+  history?: IndicatorPoint[];
 }
 
 export type CustomerGrade = 'A' | 'A-' | 'B+' | 'B' | 'C' | 'D';
@@ -68,6 +79,13 @@ export interface CustomerMetric {
 
 export type RuleTagType = 'info' | 'warning' | 'danger';
 
+export interface MarketDriver {
+  name: string;
+  direction: number;      // +1 or -1 (구조적: 지표 상승 → 구매 증가/감소)
+  contribution: number;
+  impact_sign?: number;   // sign(change_pct × direction): +1=현재 긍정, -1=현재 부정
+}
+
 export interface CustomerOpportunity {
   customer_id: string;
   customer_name: string;
@@ -81,6 +99,8 @@ export interface CustomerOpportunity {
   rule_tag_type: RuleTagType;
   sensitivity_tags: string[];
   metrics: CustomerMetric[];
+  market_directions?: Record<string, number>;
+  top_market_drivers?: MarketDriver[];
 }
 
 // ── Module 3 ─────────────────────────────────────────────

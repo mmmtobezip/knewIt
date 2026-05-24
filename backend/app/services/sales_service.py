@@ -43,7 +43,9 @@ from app.schemas.sales_guide import (
     FeatureCycle,
     FeatureDirection,
     GradeSummary,
+    IndicatorPoint,
     KeyFeature,
+    MarketDriver,
     MarketFeature,
     MarketSignal,
     MarketSignalStatus,
@@ -239,6 +241,19 @@ async def collect_features(
         cycle_char = cycles[idx] if idx < len(cycles) else "M"
         history = await fetch_indicator_history(db, name)
         change_pct = compute_change_rate_pct(history, cycle_char)
+        latest_val = history[-1][1] if history else None
+        latest_date = history[-1][0] if history else None
+        current_value = f"{latest_val:,.1f}" if latest_val is not None else None
+        current_date = latest_date.isoformat() if latest_date is not None else None
+        unit = (await db.execute(
+            select(Indicator.unit).where(Indicator.feature_name == name).limit(1)
+        )).scalar_one_or_none() or ""
+        cutoff_90 = DEMO_TODAY - timedelta(days=90)
+        sparkline = [
+            IndicatorPoint(date=d.isoformat(), value=v)
+            for d, v in history
+            if d >= cutoff_90
+        ]
         snaps.append(FeatureSnapshot(name=name, weight=weight, cycle_char=cycle_char,
                                      change_pct=change_pct))
         items.append(
@@ -249,6 +264,10 @@ async def collect_features(
                 direction=direction_of(change_pct),
                 change=format_change(change_pct, name),
                 cycle=cycle_label(cycle_char),
+                current_value=current_value,
+                current_date=current_date,
+                unit=unit,
+                history=sparkline,
             )
         )
 
@@ -274,20 +293,22 @@ def _variant_codes_for_product(product: str):
 
 
 async def _shipments_kt_by_customer(
-    db: AsyncSession, salesperson: str, product: str, today: DateT
+    db: AsyncSession, salesperson: str, product: str,
+    month_start: DateT, month_end: DateT,
 ) -> dict[str, float]:
-    """당월 (1일~today) 출하실적을 *본인 제품* 한정으로 고객사별 천톤 합계 반환.
+    """지정 기간 출하실적을 *본인 제품* 한정으로 고객사별 천톤 합계 반환.
 
     PRD 결함 3: 포스코인터내셔널 같은 다제품 고객사는 customer_profiles 가
     단일 키로 통합되어 있고, variant_code 로 제품 분기 (HE/PJ→후판, WR→선재).
+    당월: month_start=오늘 1일, month_end=today (부분월)
+    전년: month_start=작년 1일, month_end=작년 말일 (전체월)
     """
-    month_first = today.replace(day=1)
     rows = (
         await db.execute(
             select(Shipment.customer_name, func.sum(Shipment.weight_kg))
             .join(OrderLine, OrderLine.order_line_no == Shipment.order_line_no)
             .where(OrderLine.salesperson == salesperson)
-            .where(Shipment.shipped_at.between(month_first, today))
+            .where(Shipment.shipped_at.between(month_start, month_end))
             .where(Shipment.variant_code.in_(_variant_codes_for_product(product)))
             .group_by(Shipment.customer_name)
         )
@@ -339,18 +360,28 @@ async def compute_module1(
     ym_now = f"{today.year}{today.month:02d}"
     last_year = DateT(today.year - 1, today.month, 1)
     ym_last_yr = f"{last_year.year}{last_year.month:02d}"
+    last_year_end = DateT(today.year - 1, today.month,
+                          calendar.monthrange(today.year - 1, today.month)[1])
 
     # 당월 출하 (천톤) — 본인 제품 한정 (variant_code → product 자동 분기)
-    cust_actuals = await _shipments_kt_by_customer(db, salesperson, product, today)
-    # 단일 행 단위 lookup — 본인 제품의 모든 고객사 가이드/전년 실적을 dict 로
+    cust_actuals = await _shipments_kt_by_customer(
+        db, salesperson, product, today.replace(day=1), today
+    )
+    # 전년 동월 출하 (전체월) — 출하실적 기반 YoY (salesperson 필터 동일 적용)
+    cust_actuals_ly = await _shipments_kt_by_customer(
+        db, salesperson, product, last_year, last_year_end
+    )
+    # 단일 행 단위 lookup — 본인 제품의 모든 고객사 가이드를 dict 로
     guide_by_customer = await _guide_lookup(db, ym_now, product)
-    actual_by_customer_ly = await _actual_lookup(db, ym_last_yr, product)
+    # actual_by_customer_ly = await _actual_lookup(db, ym_last_yr, product)  # 그룹 실적 → shipments 로 대체
+    guide_by_customer_ly = await _guide_lookup(db, ym_last_yr, product)
+    yoy_label = f"{last_year.year}년 {last_year.month}월"
 
     # ── 제품 KPI ── (결함 4 정합: 분모 = 고객사 행 합산, 메타 행 제거)
     product_guide = sum(guide_by_customer.values())
     product_actual = sum(cust_actuals.values())
     achievement_rate = (product_actual / product_guide) if product_guide else 0.0
-    ly_product = sum(actual_by_customer_ly.values())
+    ly_product = sum(cust_actuals_ly.values())  # 전년 동월 출하실적 (shipments 기반)
     yoy = ((product_actual - ly_product) / ly_product) if ly_product else 0.0
 
     kpi = AchievementKpi(
@@ -368,8 +399,10 @@ async def compute_module1(
         actual = cust_actuals.get(c.customer_id, 0.0)
         guide = guide_by_customer.get(c.customer_id, 0.0)
         rate = (actual / guide) if guide else 0.0
-        ly_actual = actual_by_customer_ly.get(c.customer_id, 0.0)
+        ly_actual = cust_actuals_ly.get(c.customer_id, 0.0)  # shipments 기반 전년 실적
+        ly_guide = guide_by_customer_ly.get(c.customer_id, 0.0)
         yoy_c = ((actual - ly_actual) / ly_actual) if ly_actual else 0.0
+        ly_rate = (ly_actual / ly_guide) if ly_guide else 0.0
         result.append(
             CustomerAchievement(
                 customer_id=c.customer_id,
@@ -381,6 +414,8 @@ async def compute_module1(
                 volume_unit="천톤",
                 yoy_change=yoy_c,
                 status=rag_status(rate),
+                prev_achievement_rate=round(ly_rate, 4),
+                yoy_label=yoy_label,
             )
         )
     # 달성률 내림차순
@@ -459,6 +494,8 @@ def build_opportunity(
     market_pct: float,
     market_signal_score: float,
     today: DateT,
+    market_directions: dict[str, int] | None = None,
+    top_market_drivers: list[MarketDriver] | None = None,
 ) -> CustomerOpportunity:
     """노션 4.2.4 — 종합 스코어 + i 아이콘 라벨."""
     # 점수 산출
@@ -480,9 +517,10 @@ def build_opportunity(
     if achievement.yoy_change >= 0.10:
         opp_tags.append(f"전년 대비 +{round(achievement.yoy_change * 100)}%")
     if achievement.achievement_rate < 0.50:
-        risk_tags.append(f"달성률 {round(achievement.achievement_rate * 100)}% 위험")
-    if achievement.yoy_change <= -0.05:
-        risk_tags.append(f"전년 대비 {round(achievement.yoy_change * 100)}%")
+        risk_tags.append(f"기여도 {round(achievement.achievement_rate * 100)}% 위험")
+    rate_diff = achievement.achievement_rate - (achievement.prev_achievement_rate or 0)
+    if rate_diff <= -0.05:
+        risk_tags.append(f"전년 대비 기여율 {rate_diff * 100:+.0f}%p")
     if market_pct < -1:
         risk_tags.append("시황 약세 지속")
     if total < 50:
@@ -507,6 +545,8 @@ def build_opportunity(
             CustomerMetric(label="전년 대비", value=f"{achievement.yoy_change:+.0%}", sub=metric_yoy_sub(achievement.yoy_change)),
             CustomerMetric(label="시황 영향", value=f"{market_pct:+.2f}%", sub=metric_impact_sub(market_pct)),
         ],
+        market_directions=market_directions or {},
+        top_market_drivers=top_market_drivers or [],
     )
 
 
@@ -564,14 +604,19 @@ async def compute_module3(
     if not snapshots:
         return [], [], []
 
-    # 1) feature 별 월평균 시계열 수집
+    # 1) feature 별 월평균 시계열 수집 — 데이터 없는 피처는 제외
     monthly_per_feature: dict[str, dict[str, float]] = {}
     for s in snapshots:
-        monthly_per_feature[s.name] = await _monthly_avg(db, s.name)
+        avg = await _monthly_avg(db, s.name)
+        if avg:
+            monthly_per_feature[s.name] = avg
+    snapshots = [s for s in snapshots if s.name in monthly_per_feature]
 
-    # 2) 공통 ym 집합 (모든 지표가 값 있는 월만 — POC 단순)
-    common_ym = set.intersection(*(set(d.keys()) for d in monthly_per_feature.values())) \
-        if monthly_per_feature else set()
+    if not monthly_per_feature:
+        return [], [], []
+
+    # 2) 공통 ym 집합 (데이터 있는 지표만)
+    common_ym = set.intersection(*(set(d.keys()) for d in monthly_per_feature.values()))
     if not common_ym:
         return [], [], []
     ym_sorted = sorted(common_ym)

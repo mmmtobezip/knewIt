@@ -19,12 +19,14 @@ const RANK_BG = ['bg-warning', 'bg-gray-400', 'bg-amber-700'];
 interface HistorySectionProps {
   timeline: SimilarityPoint[];
   similarPeriods: SimilarPeriod[];
+  product?: string;
   isLoading?: boolean;
 }
 
 export function HistorySection({
   timeline,
   similarPeriods,
+  product = '',
   isLoading,
 }: HistorySectionProps) {
   // 현재 시점은 비교 대상이 아닌 *기준* 이므로 타임라인에서 제외 (시연 단순화)
@@ -34,7 +36,7 @@ export function HistorySection({
   return (
     <SectionCard id="section-history" accent="sky">
       <SectionHeader
-        kicker="03 · HISTORY"
+        kicker="04 · HISTORY"
         title="유사 과거 시황"
         subtitle="지금과 가장 닮았던 과거 월 Top 3를 찾아, 그때의 달성 패턴과 집중 고객사를 함께 제안해드립니다."
         icon={SectionIcons.history}
@@ -98,7 +100,7 @@ export function HistorySection({
             <SectionLabel>유사도 TOP 3 — 과거 시황 &amp; 결과</SectionLabel>
             <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-3">
               {similarPeriods.map((p) => (
-                <SimilarPeriodCard key={p.rank} period={p} />
+                <SimilarPeriodCard key={p.rank} period={p} product={product} />
               ))}
             </div>
           </div>
@@ -123,7 +125,7 @@ function LegendDot({ bg, text }: { bg: string; text: string }) {
   );
 }
 
-function SimilarPeriodCard({ period }: { period: SimilarPeriod }) {
+function SimilarPeriodCard({ period, product }: { period: SimilarPeriod; product: string }) {
   const pct = Math.round(period.achievement_rate * 100);
   const overAchieved = period.achievement_rate >= 1;
   const rankBg = RANK_BG[period.rank - 1] ?? 'bg-gray-300';
@@ -150,12 +152,12 @@ function SimilarPeriodCard({ period }: { period: SimilarPeriod }) {
 
       {/* 실적 3개 */}
       <div className="mb-4 grid grid-cols-3 gap-2.5">
-        <ResultBox label="당시 실적값" value={`${period.actual_volume}천톤`} />
-        <ResultBox label="당시 가이드값" value={`${period.guide_volume}천톤`} />
+        <ResultBox label={<>당시 나의 그룹 내<br />{product} 실적값</>} value={`${period.actual_volume}천톤`} />
+        <ResultBox label={<>당시 나의 그룹 내<br />{product} 가이드값</>} value={`${period.guide_volume}천톤`} />
         <ResultBox
-          label="달성률"
+          label="당시 달성률"
           value={`${pct}%`}
-          valueClass={overAchieved ? 'text-success' : 'text-warning'}
+          tooltip={`당시 나의 그룹 내 ${product} 실적값 ÷ 당시 나의 그룹 내 ${product} 가이드값 × 100`}
         />
       </div>
 
@@ -192,7 +194,7 @@ function SimilarPeriodCard({ period }: { period: SimilarPeriod }) {
 
       {/* 집중 고객사 */}
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
-        <span className="mr-1 text-[11px] text-gray-400">집중 고객사 (중량 순)</span>
+        <span className="mr-1 text-[11px] text-gray-400">당시 판매량 높은 고객사 순</span>
         {period.focus_customers.map((c, i) => (
           <span key={c} className="flex items-center gap-1">
             <span className="rounded-md bg-toss-blue-light px-2.5 py-0.5 text-[11px] font-semibold text-toss-blue">
@@ -245,14 +247,26 @@ function ResultBox({
   label,
   value,
   valueClass = 'text-gray-900',
+  tooltip,
 }: {
-  label: string;
+  label: React.ReactNode;
   value: string;
   valueClass?: string;
+  tooltip?: string;
 }) {
   return (
     <div className="rounded-xl bg-gray-100 px-3 py-3 text-center">
-      <div className="mb-1.5 text-[10px] text-gray-400">{label}</div>
+      <div className="mb-1.5 flex items-center justify-center gap-1 text-[10px] text-gray-400">
+        <span className="leading-tight">{label}</span>
+        {tooltip && (
+          <div className="group relative shrink-0">
+            <span className="cursor-default select-none text-[10px] text-gray-400 hover:text-gray-600">ⓘ</span>
+            <div className="invisible absolute bottom-full left-1/2 z-50 mb-1.5 w-48 -translate-x-1/2 rounded-xl border border-gray-100 bg-white p-2.5 shadow-lg group-hover:visible">
+              <p className="text-[10px] leading-relaxed text-gray-600">{tooltip}</p>
+            </div>
+          </div>
+        )}
+      </div>
       <div className={cn('text-[17px] font-extrabold tracking-tighter', valueClass)}>{value}</div>
     </div>
   );

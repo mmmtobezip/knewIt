@@ -37,6 +37,7 @@ from app.schemas.sales_guide import SalesGuidePayload
 from app.services.authorization import get_assigned_customer_ids
 from app.services.cache_service import get_or_compute, make_key
 from app.services.llm_service import get_llm_service
+from app.schemas.sales_guide import MarketDriver
 from app.services.sales_service import (
     DEMO_TODAY,
     _actual_lookup,
@@ -112,7 +113,9 @@ async def get_sales_guide(
             for s in snapshots
         ]
 
-        async def _impact_for(c: CustomerProfile) -> tuple[str, float]:
+        async def _impact_for(
+            c: CustomerProfile,
+        ) -> tuple[str, float, dict[str, int], list[MarketDriver]]:
             try:
                 res = await llm.compute_market_impact(
                     product=product,
@@ -121,12 +124,32 @@ async def get_sales_guide(
                     sensitive_topics=list(c.sensitive_topics or []),
                     features=features_payload,
                 )
-                return c.customer_id, float(res.get("market_score") or 0.0)
-            except Exception:  # LLM 실패 시 중립 (50 점 부여) — 화면 진행 보장
-                return c.customer_id, 0.0
+                score = float(res.get("market_score") or 0.0)
+                directions: dict[str, int] = {
+                    str(k): int(v) for k, v in (res.get("directions") or {}).items()
+                }
+                # 기여도 상위 지표 — abs(change_pct × weight × direction) 내림차순
+                drivers: list[MarketDriver] = []
+                for s in snapshots:
+                    d = directions.get(s.name, 0)
+                    if d == 0:
+                        continue
+                    drivers.append(MarketDriver(
+                        name=s.name,
+                        direction=d,
+                        contribution=round(abs(s.change_pct * s.weight * d), 3),
+                        impact_sign=1 if s.change_pct * d > 0 else -1,
+                    ))
+                drivers.sort(key=lambda x: x.contribution, reverse=True)
+                return c.customer_id, score, directions, drivers[:3]
+            except Exception:
+                return c.customer_id, 0.0, {}, []
 
-        impact_pairs = await asyncio.gather(*(_impact_for(c) for c in customers))
-        impact_by_customer = dict(impact_pairs)
+        impact_tuples = await asyncio.gather(*(_impact_for(c) for c in customers))
+        impact_by_customer = {
+            cid: (score, dirs, drivers)
+            for cid, score, dirs, drivers in impact_tuples
+        }
 
         # 고객사별 opportunity 카드 빌드
         achievement_by_id = {a.customer_id: a for a in achievements}
@@ -135,12 +158,17 @@ async def get_sales_guide(
             ach = achievement_by_id.get(c.customer_id)
             if ach is None:
                 continue
+            market_pct, market_dirs, top_drivers = impact_by_customer.get(
+                c.customer_id, (0.0, {}, [])
+            )
             opp = build_opportunity(
                 customer=c,
                 achievement=ach,
-                market_pct=impact_by_customer.get(c.customer_id, 0.0),
+                market_pct=market_pct,
                 market_signal_score=market_signal_score,
                 today=DEMO_TODAY,
+                market_directions=market_dirs,
+                top_market_drivers=top_drivers,
             )
             opportunities.append(opp)
         opportunities.sort(key=lambda o: o.score, reverse=True)
@@ -218,7 +246,7 @@ async def post_proposal(
     )
     ach = achievements[0] if achievements else None
     achievement_rate_pct = (ach.achievement_rate * 100) if ach else 0.0
-    yoy_change_pct = (ach.yoy_change * 100) if ach else 0.0
+    yoy_change_pct = ((ach.achievement_rate - (ach.prev_achievement_rate or 0)) * 100) if ach else 0.0
     actual_volume_kt = ach.actual_volume if ach else 0.0
     guide_volume_kt = ach.guide_volume if ach else 0.0
 

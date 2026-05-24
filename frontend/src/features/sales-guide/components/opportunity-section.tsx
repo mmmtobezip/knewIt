@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/shared/utils/cn';
 import type {
+  CustomerAchievement,
   CustomerOpportunity,
   GradeSummary,
   MarketSignal,
@@ -32,7 +33,7 @@ const GRADE_CHIP: Record<string, string> = {
   'A-': 'bg-emerald-50 text-success',
   'B+': 'bg-toss-blue-light text-toss-blue',
   B: 'bg-toss-blue-light text-toss-blue',
-  C: 'bg-amber-50 text-warning',
+  C: 'bg-red-50 text-danger',
   D: 'bg-red-50 text-danger',
 };
 const RULE_TAG: Record<RuleTagType, string> = {
@@ -45,6 +46,7 @@ interface OpportunitySectionProps {
   signal: MarketSignal | null;
   gradeSummary: GradeSummary | null;
   opportunities: CustomerOpportunity[];
+  achievements: CustomerAchievement[];
   isLoading?: boolean;
 }
 
@@ -52,12 +54,13 @@ export function OpportunitySection({
   signal,
   gradeSummary,
   opportunities,
+  achievements,
   isLoading,
 }: OpportunitySectionProps) {
   return (
     <SectionCard id="section-opportunity" accent="violet">
       <SectionHeader
-        kicker="02 · OPPORTUNITY"
+        kicker="03 · OPPORTUNITY"
         title="기회탐지"
         subtitle="시황 신호와 고객사별 스코어를 통합해, 어떤 고객사를 먼저 관리하고 언제 제안해야 할지 알려드립니다."
         icon={SectionIcons.search}
@@ -87,7 +90,7 @@ export function OpportunitySection({
                   )}>
                     {signal.score >= 0 ? '+' : ''}{signal.score.toFixed(1)}%
                   </div>
-                  <div className="text-[10px] text-gray-400">시황 스코어</div>
+                  <div className="text-[10px] text-gray-400">시황 스코어: Σ (변화율 × 가중치)</div>
                 </div>
               </div>
             ) : <div />}
@@ -104,7 +107,10 @@ export function OpportunitySection({
           <CustomerSlider label="고객사별 상세" count={opportunities.length}>
             {opportunities.map((opp) => (
               <CustomerSliderCard key={opp.customer_id}>
-                <OpportunityCustomerCard opp={opp} />
+                <OpportunityCustomerCard
+                  opp={opp}
+                  achievement={achievements.find((a) => a.customer_id === opp.customer_id)}
+                />
               </CustomerSliderCard>
             ))}
           </CustomerSlider>
@@ -138,7 +144,7 @@ function GradeBox({
 }
 
 
-function OpportunityCustomerCard({ opp }: { opp: CustomerOpportunity }) {
+function OpportunityCustomerCard({ opp, achievement }: { opp: CustomerOpportunity; achievement?: CustomerAchievement }) {
   // PRD 4.2.7 — 제안 시작: BE /api/sales-guide/proposal 호출 (LLM 3~4줄 행동지침)
   const proposal = useProposalScript();
   const [visible, setVisible] = useState(true);
@@ -175,20 +181,45 @@ function OpportunityCustomerCard({ opp }: { opp: CustomerOpportunity }) {
             <div className="mt-0.5 text-[12px] text-gray-400">{opp.industry}</div>
           </div>
         </div>
-        <CircularScore score={opp.score} />
+        <CircularScore score={opp.score} grade={opp.grade} />
       </div>
 
-      {/* 메트릭 3개 — 달성 속도 / 전년 대비 / 시황 영향 */}
+      {/* 메트릭 3개 — 달성률 / 전년 대비 / 시황 영향 */}
       <div className="mb-3 grid grid-cols-3 gap-2">
-        <SpeedMetricBox metric={opp.metrics[0]} />
-        <YoyMetricBox metric={opp.metrics[1]} />
-        <ImpactMetricBox metric={opp.metrics[2]} />
+        <AchievementRateBox achievement={achievement} />
+        <YoyMetricBox achievement={achievement} />
+        <ImpactMetricBox metric={opp.metrics[2]} marketDirections={opp.market_directions} customerName={opp.customer_name} />
       </div>
 
       {/* 룰 태그 */}
-      <div className={cn('mb-3 rounded-xl px-3.5 py-2.5 text-[12px] font-semibold', ruleClass)}>
+      {/* <div className={cn('mb-3 rounded-xl px-3.5 py-2.5 text-[12px] font-semibold', ruleClass)}>
         {opp.rule_tag}
-      </div>
+      </div> */}
+
+      {/* 종합 점수 산출 기준 */}
+      <ScoreBreakdown score={opp.score} achievement={achievement} impactPct={parsePercent(opp.metrics[2]?.value ?? '0')} />
+
+      {/* 시황 기여 상위 지표 태그 */}
+      {(opp.top_market_drivers ?? []).length > 0 && (
+        <div className="mb-3">
+        <div className="mb-1 text-[11px] text-gray-400">눈여겨볼 지표</div>
+        <div className="flex flex-wrap gap-1.5">
+          {(opp.top_market_drivers ?? []).slice(0, 2).map((d) => {
+            const impactPositive = (d.impact_sign ?? d.direction) > 0;
+            const changeSign = (d.impact_sign ?? 0) * d.direction; // sign(change_pct) 역산
+            const arrow = changeSign > 0 ? '↑' : '↓';
+            return (
+              <span
+                key={d.name}
+                className="rounded-md bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600"
+              >
+                {arrow} {d.name} · {impactPositive ? '현재 긍정 작용' : '현재 부정 작용'}
+              </span>
+            );
+          })}
+        </div>
+        </div>
+      )}
 
       {/* 민감 이슈 */}
       {opp.sensitivity_tags.length > 0 && (
@@ -303,14 +334,26 @@ function scoreLevel(score: number): {
   return { bar: 'bg-danger', text: 'text-danger' };
 }
 
+function countWeekdays(year: number, month: number, toDay?: number): number {
+  const last = toDay ?? new Date(year, month, 0).getDate();
+  let count = 0;
+  for (let d = 1; d <= last; d++) {
+    const dow = new Date(year, month - 1, d).getDay();
+    if (dow !== 0 && dow !== 6) count++;
+  }
+  return count;
+}
+
 /** 종합 스코어 원형 ring (SVG stroke-dasharray) — Toss App "내 신용 점수" 패턴 */
-function CircularScore({ score }: { score: number }) {
+function CircularScore({ score, grade }: { score: number; grade: string }) {
   const radius = 24;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference * (1 - Math.max(0, Math.min(100, score)) / 100);
-  const { bar } = scoreLevel(score);
-  // stroke 컬러를 Tailwind 토큰으로 매핑 (currentColor 활용)
-  const strokeClass = bar.replace('bg-', 'text-');
+  const strokeClass =
+    grade === 'A' || grade === 'A-' ? 'text-success'
+    : grade === 'B+' || grade === 'B' ? 'text-toss-blue'
+    : grade === 'C' ? 'text-danger'
+    : 'text-danger';
   return (
     <div className="relative shrink-0">
       <svg width="60" height="60" viewBox="0 0 60 60">
@@ -337,6 +380,97 @@ function CircularScore({ score }: { score: number }) {
   );
 }
 
+function ScoreBreakdown({ score, achievement, impactPct }: {
+  score: number;
+  achievement?: CustomerAchievement;
+  impactPct: number;
+}) {
+  const DEMO_YEAR = 2026, DEMO_MONTH = 5, DEMO_DAY = 15;
+  const totalBd = countWeekdays(DEMO_YEAR, DEMO_MONTH);
+  const elapsedBd = countWeekdays(DEMO_YEAR, DEMO_MONTH, DEMO_DAY);
+  const timeRatio = elapsedBd / totalBd;
+
+  const achievementRate = achievement?.achievement_rate ?? 0;
+  const yoyChange = achievement?.yoy_change ?? 0;
+
+  const paceRaw = (achievementRate / timeRatio) * 100;
+  const paceScore = Math.min(100, Math.round(paceRaw));
+  const isCapped = paceRaw >= 100;
+
+  const yoyScore = Math.round(Math.max(0, Math.min(100, (yoyChange + 0.20) / 0.40 * 100)));
+  const yoySub = yoyChange >= 0.15 ? '큰 폭 성장'
+    : yoyChange >= 0.01 ? '성장'
+    : yoyChange >= -0.01 ? '전년 동수준'
+    : '역성장';
+
+  const impactScore = impactPct > 1 ? 70 : impactPct < -1 ? 30 : 50;
+  const impactSub = impactPct > 1 ? '기회' : impactPct < -1 ? '주의' : '중립';
+
+  return (
+    <div className="mb-3 rounded-xl bg-gray-50 px-3.5 py-3">
+      <div className="mb-2 text-[11px] font-bold text-gray-500">종합 점수 산출 기준</div>
+      <div className="space-y-2">
+        <div>
+          <div className="flex items-center justify-between text-[10px]">
+            <span className="font-semibold text-gray-600">내 기여도 <span className="font-normal text-gray-400">× 40%</span></span>
+            <span className="font-bold text-gray-700">= {(paceScore * 0.4).toFixed(1)}</span>
+          </div>
+          <div className="mt-0.5 text-[10px] text-gray-400">
+            {Math.round(achievementRate * 100)}% ÷ (경과 영업일/전체 영업일) = {Math.round(paceRaw)}% → <span className="font-semibold text-gray-600">{paceScore}점{isCapped ? ' (상한)' : ''}</span>
+          </div>
+        </div>
+        <div>
+          <div className="flex items-center justify-between text-[10px]">
+            <span className="font-semibold text-gray-600">전년 대비 <span className="font-normal text-gray-400">× 40%</span></span>
+            <span className="font-bold text-gray-700">= {(yoyScore * 0.4).toFixed(1)}</span>
+          </div>
+          <div className="mt-0.5 text-[10px] text-gray-400">
+            (올해 기여율 - 작년 기여율) / 작년 기여율 = {yoyChange >= 0 ? '+' : ''}{Math.round(yoyChange * 100)}% → <span className="font-semibold text-gray-600">{yoyScore}점{yoyScore === 100 ? ' (상한)' : ''} ({yoySub})</span>
+          </div>
+        </div>
+        <div>
+          <div className="flex items-center justify-between text-[10px]">
+            <span className="font-semibold text-gray-600">시황 영향 <span className="font-normal text-gray-400">× 20%</span></span>
+            <span className="font-bold text-gray-700">= {(impactScore * 0.2).toFixed(1)}</span>
+          </div>
+          <div className="mt-0.5 text-[10px] text-gray-400">
+            시황 스코어 {impactPct >= 0 ? '+' : ''}{impactPct.toFixed(2)}% → <span className="font-semibold text-gray-600">{impactScore}점 ({impactSub})</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AchievementRateBox({ achievement }: { achievement?: CustomerAchievement }) {
+  if (!achievement) return <div className="rounded-xl bg-gray-50 px-3.5 py-3" />;
+  const pct = Math.min(Math.round(achievement.achievement_rate * 100), 100);
+  const barColor = pct >= 80 ? 'bg-success' : pct >= 50 ? 'bg-warning' : 'bg-danger';
+  const textColor = pct >= 80 ? 'text-success' : pct >= 50 ? 'text-warning' : 'text-danger';
+  return (
+    <div className="rounded-xl bg-gray-50 px-3.5 py-3">
+      <div className="flex items-center gap-1">
+        <span className="text-[11px] text-gray-500">내 기여도</span>
+        <div className="group relative">
+          <span className="cursor-default select-none text-[10px] text-gray-400 hover:text-gray-600">ⓘ</span>
+          <div className="invisible absolute left-0 top-full z-50 mt-1 w-44 rounded-xl border border-gray-100 bg-white p-2.5 shadow-lg group-hover:visible">
+            <p className="text-[10px] leading-relaxed text-gray-600">
+              나의 실적 ÷ 그룹 내 고객사별 제품 가이드
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className={cn('mt-1 text-[16px] font-extrabold tracking-tight', textColor)}>{pct}%</div>
+      <div className="mt-2 h-1 overflow-hidden rounded-full bg-gray-200">
+        <div className={cn('h-full rounded-full transition-all', barColor)} style={{ width: `${pct}%` }} />
+      </div>
+      <div className="mt-1.5 text-[10px] font-bold text-gray-400">
+        {achievement.actual_volume} / {achievement.guide_volume} {achievement.volume_unit}
+      </div>
+    </div>
+  );
+}
+
 function SpeedMetricBox({ metric }: { metric?: { label: string; value: string; sub?: string } }) {
   if (!metric) return <div />;
   const score = parsePercent(metric.value);
@@ -348,26 +482,100 @@ function SpeedMetricBox({ metric }: { metric?: { label: string; value: string; s
   return <MetricBox label="달성 속도" value={metric.value} sub={sub} normalizedScore={score} />;
 }
 
-function YoyMetricBox({ metric }: { metric?: { label: string; value: string; sub?: string } }) {
-  if (!metric) return <div />;
-  const yoy = parsePercent(metric.value);
-  const sub =
-    yoy >= 15 ? '큰 폭 성장'
-      : yoy >= 1 ? '성장'
-        : yoy >= -1 ? '전년 동수준'
-          : '역성장';
-  // Linear Clip ±20% → 0~100 정규화 (BE sales_service.normalize_yoy 와 동일)
-  const normalizedScore = Math.max(0, Math.min(100, ((yoy + 20) / 40) * 100));
-  return <MetricBox label="전년 대비" value={metric.value} sub={sub} normalizedScore={normalizedScore} />;
+function YoyMetricBox({ achievement }: { achievement?: CustomerAchievement }) {
+  if (!achievement) return <div className="rounded-xl bg-gray-50 px-3.5 py-3" />;
+  const prev = Math.round((achievement.prev_achievement_rate ?? 0) * 100);
+  const curr = Math.round(achievement.achievement_rate * 100);
+  const diff = curr - prev;
+  const isUp = diff >= 0;
+  return (
+    <div className="rounded-xl bg-gray-50 px-3.5 py-3">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] text-gray-500">전년 대비 나의 기여율</span>
+      </div>
+      <div className="mt-1.5 flex items-center gap-1 text-[13px] font-extrabold tracking-tight text-gray-900">
+        <span>{prev}%</span>
+        <span className="text-gray-300">→</span>
+        <span>{curr}%</span>
+      </div>
+      <div className={cn('mt-1 text-[12px] font-extrabold', isUp ? 'text-success' : 'text-danger')}>
+        {isUp ? '▲' : '▼'} {isUp ? '+' : ''}{diff}%p
+      </div>
+    </div>
+  );
 }
 
-function ImpactMetricBox({ metric }: { metric?: { label: string; value: string; sub?: string } }) {
+function ImpactMetricBox({
+  metric,
+  marketDirections,
+  customerName,
+}: {
+  metric?: { label: string; value: string; sub?: string };
+  marketDirections?: Record<string, number>;
+  customerName?: string;
+}) {
   if (!metric) return <div />;
   const impact = parsePercent(metric.value);
   const sub = impact > 1 ? '기회' : impact >= -1 ? '중립' : '주의';
-  // BE market_impact_score: >+1% 70 / -1~+1% 50 / <-1% 30
   const normalizedScore = impact > 1 ? 70 : impact >= -1 ? 50 : 30;
-  return <MetricBox label="시황 영향" value={metric.value} sub={sub} normalizedScore={normalizedScore} />;
+  const { bar, text } = scoreLevel(normalizedScore);
+
+  const positives = Object.entries(marketDirections ?? {}).filter(([, v]) => v === 1).map(([k]) => k);
+  const negatives = Object.entries(marketDirections ?? {}).filter(([, v]) => v === -1).map(([k]) => k);
+  const hasDirections = positives.length > 0 || negatives.length > 0;
+  const cname = customerName ?? '고객사';
+
+  return (
+    <div className="rounded-xl bg-gray-50 px-3.5 py-3">
+      <div className="flex items-center gap-1">
+        <span className="text-[11px] text-gray-500">시황 영향</span>
+        {hasDirections && (
+          <div className="group relative">
+            <span className="cursor-default select-none text-[10px] text-gray-400 hover:text-gray-600">ⓘ</span>
+            <div className="invisible absolute left-0 top-full z-50 mt-1 w-60 rounded-xl border border-gray-100 bg-white p-3 shadow-lg group-hover:visible">
+              <div className="mb-2.5 rounded-lg bg-gray-50 p-2.5">
+                <div className="mb-1 text-[10px] font-bold text-gray-700">시황 영향 산출 방식</div>
+                <div className="mb-1.5 text-[10px] leading-relaxed text-gray-500">
+                  각 시황 지표의 (변화율 × 가중치 × AI 방향 판단)을 합산한 값입니다.
+                </div>
+                <div className="text-[10px] text-gray-500">
+                  현재 시황 스코어: <span className="font-bold text-gray-700">{metric.value}</span>
+                </div>
+              </div>
+              <div className="mb-2 text-[11px] font-bold text-gray-700">AI 판단 시황 기여 지표</div>
+              {positives.length > 0 && (
+                <div className="mb-2.5">
+                  <div className="mb-1 text-[10px] font-bold text-success">구매 증가 요인</div>
+                  <div className="mb-1.5 text-[10px] text-gray-500">
+                    이 지표가 <span className="font-semibold text-success">상승</span>하면 {cname}에게 <span className="font-semibold text-success">호재</span>입니다.
+                  </div>
+                  {positives.map((name) => (
+                    <div key={name} className="truncate text-[10px] text-gray-600">· {name}</div>
+                  ))}
+                </div>
+              )}
+              {negatives.length > 0 && (
+                <div>
+                  <div className="mb-1 text-[10px] font-bold text-danger">구매 감소 요인</div>
+                  <div className="mb-1.5 text-[10px] text-gray-500">
+                    이 지표가 <span className="font-semibold text-success">상승</span>하면 {cname}에게 <span className="font-semibold text-danger">악재</span>입니다.
+                  </div>
+                  {negatives.map((name) => (
+                    <div key={name} className="truncate text-[10px] text-gray-600">· {name}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="mt-1 text-[16px] font-extrabold tracking-tight text-gray-900">{metric.value}</div>
+      <div className="mt-2 h-1 overflow-hidden rounded-full bg-gray-200">
+        <div className={cn('h-full rounded-full transition-all', bar)} style={{ width: `${Math.max(0, Math.min(100, normalizedScore))}%` }} />
+      </div>
+      <div className={cn('mt-1.5 text-[10px] font-bold', text)}>{sub}</div>
+    </div>
+  );
 }
 
 function MetricBox({

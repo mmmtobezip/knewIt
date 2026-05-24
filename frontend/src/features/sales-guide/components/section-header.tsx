@@ -14,17 +14,19 @@ import { cn } from '@/shared/utils/cn';
  *  - 서브타이틀 (12px, 회색, 판매사원 친화적 설명문)
  */
 
-export type SectionAccent = 'blue' | 'violet' | 'sky';
+export type SectionAccent = 'blue' | 'violet' | 'sky' | 'amber';
 
 const ACCENT_BG: Record<SectionAccent, string> = {
   blue: 'bg-[#3182f6]',
   violet: 'bg-[#7c3aed]',
   sky: 'bg-[#0ea5e9]',
+  amber: 'bg-[#f59e0b]',
 };
 const ACCENT_TEXT: Record<SectionAccent, string> = {
   blue: 'text-[#3182f6]',
   violet: 'text-[#7c3aed]',
   sky: 'text-[#0ea5e9]',
+  amber: 'text-[#f59e0b]',
 };
 
 interface SectionHeaderProps {
@@ -33,9 +35,10 @@ interface SectionHeaderProps {
   subtitle: string;
   icon: ReactNode;
   accent: SectionAccent;
+  action?: ReactNode;
 }
 
-export function SectionHeader({ kicker, title, subtitle, icon, accent }: SectionHeaderProps) {
+export function SectionHeader({ kicker, title, subtitle, icon, accent, action }: SectionHeaderProps) {
   return (
     <div className="mb-6">
       <div className={cn('mb-2.5 text-[11px] font-extrabold uppercase tracking-[0.14em]', ACCENT_TEXT[accent])}>
@@ -52,6 +55,7 @@ export function SectionHeader({ kicker, title, subtitle, icon, accent }: Section
         </div>
         <h2 className="text-[24px] font-extrabold tracking-tighter text-gray-900">{title}</h2>
         <span className="text-[12px] font-medium text-gray-400">{subtitle}</span>
+        {action && <div className="ml-auto">{action}</div>}
       </div>
     </div>
   );
@@ -103,6 +107,12 @@ export const SectionIcons = {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="11" cy="11" r="8" />
       <path d="m21 21-4.3-4.3" />
+    </svg>
+  ),
+  trend: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+      <polyline points="16 7 22 7 22 13" />
     </svg>
   ),
   history: (

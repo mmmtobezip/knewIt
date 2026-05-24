@@ -45,6 +45,8 @@ class CustomerAchievement(BaseModel):
     volume_unit: str = "천톤"
     yoy_change: float
     status: AchievementStatus
+    prev_achievement_rate: float = 0.0   # 전년 동월 달성률 (0~1.x)
+    yoy_label: str = ""                  # 예: "2025년 5월"
 
 
 # ─────────────────── Module 2 — 기회탐지 ───────────────────
@@ -57,6 +59,11 @@ class MarketSignal(BaseModel):
     responsible: str                 # 담당자 표시명
 
 
+class IndicatorPoint(BaseModel):
+    date: str    # YYYY-MM-DD
+    value: float
+
+
 class KeyFeature(BaseModel):
     rank: int
     name: str                        # 지표명
@@ -64,6 +71,10 @@ class KeyFeature(BaseModel):
     direction: FeatureDirection
     change: str                      # "+3.8%" 형식 (FE 그대로 표시)
     cycle: FeatureCycle
+    current_value: str | None = None  # 최신 실측값 표시 문자열
+    current_date: str | None = None   # 최신 실측값 날짜 (YYYY-MM-DD)
+    unit: str = ""                    # 단위 (예: USD/MT, %, 원/톤)
+    history: list[IndicatorPoint] = Field(default_factory=list)  # 90일 스파크라인용
 
 
 class GradeSummary(BaseModel):
@@ -76,6 +87,13 @@ class CustomerMetric(BaseModel):
     label: str
     value: str
     sub: str | None = None
+
+
+class MarketDriver(BaseModel):
+    name: str          # 지표명
+    direction: int     # +1 or -1 (구조적 관계: 지표 상승 → 구매 증가/감소)
+    contribution: float  # abs(change_pct × weight × direction)
+    impact_sign: int = 0  # sign(change_pct × direction): +1=현재 긍정 작용, -1=현재 부정 작용
 
 
 class CustomerOpportunity(BaseModel):
@@ -91,6 +109,8 @@ class CustomerOpportunity(BaseModel):
     rule_tag_type: RuleTagType
     sensitivity_tags: list[str] = Field(default_factory=list)  # customer.sensitive_topics
     metrics: list[CustomerMetric] = Field(default_factory=list)  # 달성속도/전년대비/시황영향
+    market_directions: dict[str, int] = Field(default_factory=dict)   # 지표명 → +1/-1/0
+    top_market_drivers: list[MarketDriver] = Field(default_factory=list)  # 기여 상위 3개
 
 
 # ─────────────────── Module 3 — 과거 시황 학습 리포트 ───────────────────
@@ -161,7 +181,9 @@ __all__ = [
     "FeatureCycle",
     "FeatureDirection",
     "GradeSummary",
+    "IndicatorPoint",
     "KeyFeature",
+    "MarketDriver",
     "MarketFeature",
     "MarketSignal",
     "MarketSignalStatus",
