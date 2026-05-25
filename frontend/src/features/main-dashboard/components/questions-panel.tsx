@@ -32,11 +32,15 @@ export function QuestionsPanel() {
 
   const [activeIdx, setActiveIdx] = useState(0);
   const autoFiredRef = useRef<string | null>(null);
+  // 동시 호출 차단 — auto-fire 와 사용자 클릭 간 race 로 답변이 2번 누적되는 버그 방지
+  const firingRef = useRef(false);
 
   const fireQuestion = useCallback(
     async (idx: number) => {
+      if (firingRef.current) return; // 이미 진행 중인 호출이 있으면 무시
       const q = questionsQuery.data?.questions?.[idx];
       if (!q || !productCode) return;
+      firingRef.current = true;
       clearMessages();
       setActiveIdx(idx);
       autoFiredRef.current = sessionId;
@@ -58,6 +62,7 @@ export function QuestionsPanel() {
         toast.show('MSG-ERR-03');
       } finally {
         finishStreaming();
+        firingRef.current = false;
       }
     },
     [
