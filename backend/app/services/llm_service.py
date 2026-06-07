@@ -511,6 +511,89 @@ class LLMService:
         return text
 
 
+    async def fetch_news_for_cause_flow(
+        self,
+        *,
+        indicator_name: str,
+        change_rate: float,
+        product: str,
+    ) -> list[dict]:
+        """인과 흐름도용 뉴스 — LLM이 변동 맥락에 맞는 키워드로 자율 검색.
+
+        기존 고정 키워드(_PRODUCT_QUERY) 대신 LLM이 변동 원인에 맞는
+        키워드를 결정해 search_news 도구를 반복 호출.
+        """
+        from app.services.news_service import get_news_service
+
+        tool_def = {
+            "name": "search_news",
+            "description": "철강 시황 관련 최신 뉴스를 검색합니다.",
+            "input_schema": {
+                "type": "object",
+                "required": ["query"],
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "검색 키워드 (한국어 또는 영어)",
+                    }
+                },
+            },
+        }
+        prompt = _render(
+            _load_prompt("cause_flow_news"),
+            indicator_name=indicator_name,
+            change_rate=f"{change_rate:+.2f}",
+            product=product,
+        )
+        messages: list[dict] = [{"role": "user", "content": prompt}]
+        news_svc = get_news_service()
+        collected: list[dict] = []
+
+        for _ in range(3):
+            resp = await self.client.messages.create(
+                model=self.model,
+                max_tokens=1000,
+                tools=[tool_def],
+                messages=messages,
+            )
+            messages.append({"role": "assistant", "content": resp.content})
+            if resp.stop_reason == "end_turn":
+                break
+
+            tool_results = []
+            for block in resp.content:
+                if getattr(block, "type", None) != "tool_use":
+                    continue
+                query = block.input.get("query", "")
+                docs = await news_svc.search(query)
+                result = [
+                    {
+                        "title": d.title,
+                        "summary": d.summary,
+                        "url": d.url,
+                        "published_at": str(d.published_at),
+                        "source": d.source,
+                    }
+                    for d in docs[:5]
+                ]
+                collected.extend(result)
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": _to_json(result),
+                })
+            messages.append({"role": "user", "content": tool_results})
+
+        # 제목 기준 중복 제거 후 최대 10개 반환
+        seen: set[str] = set()
+        unique: list[dict] = []
+        for n in collected:
+            if n["title"] not in seen:
+                seen.add(n["title"])
+                unique.append(n)
+        return unique[:10]
+
+
 _llm: LLMService | None = None
 
 

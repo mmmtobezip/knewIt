@@ -41,17 +41,14 @@ from app.schemas.domain import (
 )
 from app.services.authorization import assert_customer_access
 from app.services.cache_service import get_or_compute, make_key
+from app.services.cause_flow_agent import CauseFlowAgent
 from app.services.indicator_service import fetch_indicator, top_movers_for_product
 from app.services.llm_service import get_llm_service
-from app.services.news_service import get_news_service, query_for_indicator
+from app.services.news_service import get_news_service
 
 router = APIRouter(prefix="/api", tags=["dashboard"])
 SETTINGS = get_settings()
 KST = ZoneInfo(SETTINGS.app_timezone)
-
-
-class _NewsListWrap(BaseModel):
-    items: list[dict]
 
 
 class _TopMoversWrap(BaseModel):
@@ -109,19 +106,6 @@ async def _resolve_top_movers(
     return result
 
 
-async def _resolve_news(
-    customer_id: str, product: str, top_feature: str
-) -> _NewsListWrap:
-    key = make_key(CacheScope.NEWS, customer_id, product, top_feature)
-
-    async def compute() -> _NewsListWrap:
-        ko_q, en_q = query_for_indicator(top_feature, product)
-        docs = await get_news_service().search(ko_q, en_q)
-        return _NewsListWrap(items=[d.model_dump() for d in docs])
-
-    result, _ = await get_or_compute(key, _NewsListWrap, compute)
-    return result
-
 
 @router.get(
     "/dashboard",
@@ -143,7 +127,6 @@ async def get_dashboard(
         raise ApiException(ErrorCode.DATA_001, detail=f"product={product} 지표 없음")
 
     top = movers_wrap.top_movers[0]
-    news_wrap = await _resolve_news(customer, product, top.indicator)
 
     # PRD 0516 — axis 폐기. 동일 product 의 key_feature_importance Top-3 (top.indicator 제외)
     # 를 LLM cause_flow 컨텍스트로 전달.
@@ -180,13 +163,12 @@ async def get_dashboard(
     flow_key = make_key(CacheScope.CAUSE_FLOW, customer, product, top.indicator)
 
     async def _compute_flow() -> _FlowWrap:
-        steps = await llm.generate_cause_flow(
+        agent = CauseFlowAgent(llm, db, get_news_service())
+        steps = await agent.run(
             indicator_name=top.indicator,
             change_rate=top.change_w1,
-            period="W-1",
-            news=news_wrap.items,
+            product=product,
             adjacent_indicators=adjacent,
-            axis_name=None,
         )
         return _FlowWrap(steps=steps)
 
