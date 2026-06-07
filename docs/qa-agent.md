@@ -1,6 +1,5 @@
 # Q&A Agent 개선 — LangGraph + tool_use
 
-> 해커톤 결승 대응 개발 (2026-06-07)
 > 추천 질문 생성 및 답변 기능을 AI Agent 방식으로 전환
 
 ---

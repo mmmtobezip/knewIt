@@ -1,6 +1,4 @@
 # Cause Flow Agent
-
-> 해커톤 결승 대응 개발 (2026-06-07)
 > 고정 키워드 매핑 방식 → LangGraph 2단계 Agent로 전환
 
 ---
