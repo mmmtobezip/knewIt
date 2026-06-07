@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Lightbulb } from 'lucide-react';
-import { useAnswerQuestion, useTodayQuestions } from '@/lib/api/queries/dashboard';
+import { useTodayQuestions } from '@/lib/api/queries/dashboard';
 import { useSelectionStore } from '@/stores/selection-store';
 import { useChatStore } from '@/stores/chat-store';
 import { toast } from '@/stores/toast-store';
@@ -17,14 +17,20 @@ import { cn } from '@/shared/utils/cn';
  * - 질문 카드 클릭 시 JSON 답변(POST /api/today-questions/answer) 호출
  * - 답변은 채팅 store 의 마지막 assistant 메시지로 표시
  */
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
+
+function getAuthToken(): string {
+  if (typeof window === 'undefined') return 'mock-token-emp_2026001';
+  return localStorage.getItem('auth-token') ?? 'mock-token-emp_2026001';
+}
+
 export function QuestionsPanel() {
-  const { productCode } = useSelectionStore();
+  const { productCode, customerId } = useSelectionStore();
   const questionsQuery = useTodayQuestions(productCode);
-  const answerMutation = useAnswerQuestion();
 
   const appendUserMessage = useChatStore((s) => s.appendUserMessage);
   const startAssistantMessage = useChatStore((s) => s.startAssistantMessage);
-  const appendAssistantDelta = useChatStore((s) => s.appendAssistantDelta);
+  const replaceLastAssistantMessage = useChatStore((s) => s.replaceLastAssistantMessage);
   const finishStreaming = useChatStore((s) => s.finishStreaming);
   const clearMessages = useChatStore((s) => s.clearMessages);
   const sessionId = useChatStore((s) => s.sessionId);
@@ -37,7 +43,7 @@ export function QuestionsPanel() {
 
   const fireQuestion = useCallback(
     async (idx: number) => {
-      if (firingRef.current) return; // 이미 진행 중인 호출이 있으면 무시
+      if (firingRef.current) return;
       const q = questionsQuery.data?.questions?.[idx];
       if (!q || !productCode) return;
       firingRef.current = true;
@@ -49,15 +55,60 @@ export function QuestionsPanel() {
       startAssistantMessage();
 
       try {
-        const result = await answerMutation.mutateAsync({
-          product: productCode,
-          qid: q.qid,
-          text: q.text,
-          trigger_indicators: q.trigger_indicators,
-          related_groups_internal: q.related_groups_internal,
+        const response = await fetch(`${API_BASE}/api/today-questions/answer/stream`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${getAuthToken()}`,
+          },
+          body: JSON.stringify({
+            product: productCode,
+            qid: q.qid,
+            text: q.text,
+            trigger_indicators: q.trigger_indicators,
+            related_groups_internal: q.related_groups_internal,
+            customer_id: customerId ?? null,
+          }),
         });
-        const ans = result.answer;
-        appendAssistantDelta(`${ans.briefing}\n\n[추천 대응 방안]\n${ans.sales_rep_script}`);
+
+        if (!response.ok || !response.body) throw new Error('stream error');
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const raw = line.slice(6).trim();
+            if (raw === '[DONE]') break;
+
+            try {
+              const event = JSON.parse(raw) as {
+                type: string;
+                message?: string;
+                answer?: { briefing: string; sales_rep_script: string };
+              };
+              if (event.type === 'step' && event.message) {
+                replaceLastAssistantMessage(event.message);
+              } else if (event.type === 'result' && event.answer) {
+                const ans = event.answer;
+                replaceLastAssistantMessage(
+                  `${ans.briefing}\n\n[추천 대응 방안]\n${ans.sales_rep_script}`,
+                );
+              }
+            } catch {
+              // malformed JSON 무시
+            }
+          }
+        }
       } catch {
         toast.show('MSG-ERR-03');
       } finally {
@@ -68,13 +119,13 @@ export function QuestionsPanel() {
     [
       questionsQuery.data,
       productCode,
+      customerId,
       sessionId,
       clearMessages,
       appendUserMessage,
       startAssistantMessage,
-      appendAssistantDelta,
+      replaceLastAssistantMessage,
       finishStreaming,
-      answerMutation,
     ],
   );
 

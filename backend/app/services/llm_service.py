@@ -264,12 +264,17 @@ class LLMService:
         return Strategy.model_validate(data)
 
     async def generate_questions(
-        self, *, product: str, top_indicators: list[dict]
+        self,
+        *,
+        product: str,
+        top_indicators: list[dict],
+        customer_profiles: list[dict] | None = None,
     ) -> list[TodayQuestion]:
         prompt = _render(
             _load_prompt("questions"),
             product=product,
             top_indicators_json=_to_json(top_indicators),
+            customer_profiles_json=_to_json(customer_profiles or []),
         )
         data = await self._complete_json(prompt)
         if not isinstance(data, list) or len(data) != 3:

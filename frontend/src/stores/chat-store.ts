@@ -24,6 +24,8 @@ interface ChatState {
   startAssistantMessage: () => void;
   /** assistant 메시지 청크 누적 */
   appendAssistantDelta: (delta: string) => void;
+  /** 마지막 assistant 메시지 전체 교체 (SSE 단계 메시지 → 최종 답변 전환용) */
+  replaceLastAssistantMessage: (content: string) => void;
   /** 스트리밍 종료 (완료/타임아웃/에러) */
   finishStreaming: () => void;
   /** 메시지 초기화 (단, 세션은 유지) */
@@ -74,6 +76,14 @@ export const useChatStore = create<ChatState>((set) => ({
       const last = state.messages.at(-1);
       if (!last || last.role !== 'assistant') return state;
       const updated = [...state.messages.slice(0, -1), { ...last, content: last.content + delta }];
+      return { messages: updated };
+    }),
+
+  replaceLastAssistantMessage: (content) =>
+    set((state) => {
+      const last = state.messages.at(-1);
+      if (!last || last.role !== 'assistant') return state;
+      const updated = [...state.messages.slice(0, -1), { ...last, content }];
       return { messages: updated };
     }),
 

@@ -1,7 +1,8 @@
-"""PRD 0514 추천 질문 Agent (SMI-Bot v1.1).
+"""추천 질문 Agent (SMI-Bot v2 — LangGraph + tool_use).
 
-GET /api/today-questions?product=...  → 3개 질문 생성
-POST /api/today-questions/answer       → 클릭된 질문의 1분 브리핑 + 응대 스크립트 JSON
+GET  /api/today-questions              → 담당자별 개인화 질문 3개 (고객사 프로필 반영)
+POST /api/today-questions/answer       → 기존 단발 답변 (하위 호환)
+POST /api/today-questions/answer/stream → LangGraph 4단계 체인 SSE 스트리밍
 """
 from __future__ import annotations
 
@@ -9,7 +10,9 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -17,6 +20,7 @@ from app.core.auth import get_current_user
 from app.core.errors import ApiException, ErrorCode
 from app.core.response import ApiSuccess, ok
 from app.db import get_db
+from app.models import CustomerProfile as CustomerProfileORM
 from app.models import Product
 from app.schemas.api import (
     CacheScope,
@@ -27,9 +31,12 @@ from app.schemas.domain import (
     SessionUser,
     TodayQuestion,
 )
+from app.services.authorization import get_assigned_customer_ids
 from app.services.cache_service import get_or_compute, make_key
 from app.services.indicator_service import fetch_indicator, top_movers_for_product
 from app.services.llm_service import get_llm_service
+from app.services.news_service import get_news_service
+from app.services.qa_agent import QAAgent, QAState
 
 router = APIRouter(prefix="/api", tags=["questions"])
 SETTINGS = get_settings()
@@ -45,35 +52,55 @@ class _QuestionsWrap(BaseModel):
 @router.get(
     "/today-questions",
     response_model=ApiSuccess[TodayQuestionsData],
-    summary="PRD 0516 추천 질문 3개 생성 (제품 단위, 자정 KST 까지 고정)",
+    summary="SMI-Bot v2 — 담당자별 개인화 질문 3개 (고객사 프로필 반영)",
 )
 async def get_today_questions(
-    product: str = Query(..., description="product_code (예: HR(고로밀))"),
-    user: SessionUser = Depends(get_current_user),  # noqa: ARG001
+    product: str = Query(..., description="product_code"),
+    user: SessionUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ApiSuccess[TodayQuestionsData]:
     if (await db.get(Product, product)) is None:
         raise ApiException(ErrorCode.DATA_001, detail=f"product={product} 미정의")
 
-    # PRD 0516 — 자정 KST boundary 로 고정. 같은 날(YYYY-MM-DD)이면 같은 질문.
     today_kst = datetime.now(KST).date().isoformat()
-    key = make_key(CacheScope.QUESTIONS, today_kst, product, "_")
+    # 담당자별 개인화 캐시 (user_id 포함)
+    key = make_key(CacheScope.QUESTIONS, today_kst, product, user.user_id)
 
     async def compute() -> _QuestionsWrap:
         movers, _ = await top_movers_for_product(db, product, top_n=5)
         if not movers:
             raise ApiException(ErrorCode.DATA_001, detail="질문 생성용 지표 데이터 없음")
+
+        # 담당 고객사 프로필 조회 (최대 3개 — 개인화 컨텍스트)
+        assigned_ids = await get_assigned_customer_ids(db, user.user_id, user.user_role)
+        profiles: list[dict] = []
+        if assigned_ids:
+            rows = (
+                await db.execute(
+                    select(CustomerProfileORM)
+                    .where(CustomerProfileORM.customer_id.in_(assigned_ids))
+                    .where(CustomerProfileORM.product_group.contains([product]))
+                    .limit(3)
+                )
+            ).scalars().all()
+            profiles = [
+                {
+                    "customer_id": r.customer_id,
+                    "industry": r.industry,
+                    "market_region": r.market_region,
+                    "sensitive_topics": list(r.sensitive_topics or []),
+                }
+                for r in rows
+            ]
+
         llm = get_llm_service()
         questions = await llm.generate_questions(
             product=product,
             top_indicators=[
-                {
-                    "indicator": m.indicator,
-                    "change_w1": m.change_w1,
-                    "score": m.score,
-                }
+                {"indicator": m.indicator, "change_w1": m.change_w1, "score": m.score}
                 for m in movers
             ],
+            customer_profiles=profiles,
         )
         return _QuestionsWrap(
             product=product,
@@ -97,12 +124,13 @@ class AnswerRequest(BaseModel):
     text: str
     trigger_indicators: list[str]
     related_groups_internal: list[str] = []
+    customer_id: str | None = None  # SSE 엔드포인트에서 고객사 프로필 조회용
 
 
 @router.post(
     "/today-questions/answer",
     response_model=ApiSuccess[QuestionAnswerData],
-    summary="PRD 0516 추천 질문 답변 (Few-Shot + Structured Output, 동적 호칭)",
+    summary="추천 질문 답변 — 기존 단발 방식 (하위 호환)",
 )
 async def post_answer(
     body: AnswerRequest,
@@ -138,8 +166,6 @@ async def post_answer(
         if cat:
             trigger_cats.add(cat)
 
-    # PRD 0523 — indicators.category_big 다양성 보장 (axis 대체).
-    # trigger 와 다른 category_big 을 우선 채우고, 부족하면 같은 category_big 의 importance 높은 지표로 보충.
     triggers_set = set(body.trigger_indicators)
     pairs = sorted(
         zip(
@@ -181,10 +207,73 @@ async def post_answer(
         related_indicators=related_data,
         adjacent_indicators=[],
     )
-    # 방어 후처리 — Structured Output 으로 형식은 거의 보장되지만
-    # 라벨 prefix / 호칭 오류 시 마지막 fallback.
     answer.sales_rep_script = _sanitize_script(answer.sales_rep_script, user_display)
     return ok(QuestionAnswerData(answer=answer))
+
+
+@router.post(
+    "/today-questions/answer/stream",
+    summary="SMI-Bot v2 — LangGraph 4단계 Agent SSE 스트리밍",
+)
+async def post_answer_stream(
+    body: AnswerRequest,
+    user: SessionUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    """LangGraph plan→analyze→briefing→script 체인을 SSE 로 스트리밍.
+
+    이벤트:
+      {"type": "step",   "node": "...", "message": "..."}  — 단계별 진행
+      {"type": "result", "answer": {...}}                   — 최종 답변
+      [DONE]
+    """
+    if (await db.get(Product, body.product)) is None:
+        raise ApiException(ErrorCode.DATA_001, detail=f"product={body.product} 미정의")
+
+    user_display = user.name or user.user_id
+
+    # 선택된 고객사 프로필 조회 (있을 때만)
+    customer_profile: dict | None = None
+    if body.customer_id:
+        cp_row = await db.get(CustomerProfileORM, body.customer_id)
+        if cp_row is not None:
+            customer_profile = {
+                "customer_id": cp_row.customer_id,
+                "industry": cp_row.industry,
+                "market_region": cp_row.market_region,
+                "sensitive_topics": list(cp_row.sensitive_topics or []),
+                "risk_factors": list(cp_row.risk_factors or []),
+            }
+
+    initial: QAState = {
+        "qid": body.qid,
+        "question_text": body.text,
+        "user_name": user_display,
+        "product": body.product,
+        "customer_profile": customer_profile,
+        "collected_indicators": [],
+        "collected_news": [],
+        "market_analysis": "",
+        "briefing": "",
+        "sources": [],
+        "sales_rep_script": "",
+        "confidence": 0.0,
+    }
+
+    agent = QAAgent(get_llm_service(), db, get_news_service())
+
+    async def generate():
+        async for chunk in agent.astream_sse(initial):
+            yield chunk
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 _LABEL_PATTERN = "\n\n"
@@ -200,23 +289,15 @@ _BAD_HONORIFICS = ("고객님,", "선생님,", "사장님,", "판매담당자님
 
 
 def _sanitize_script(text: str, user_name: str) -> str:
-    """LLM 응답의 sales_rep_script 정제 (Phase A 방어 후처리).
-
-    - 다중 단락 → 첫 단락만 / 줄바꿈 → 공백
-    - 자체 라벨 prefix 제거
-    - 호칭이 "{user_name} 담당자님, " 가 아니면 강제 prepend
-    """
     if not text:
         return text
     cleaned = text.split(_LABEL_PATTERN, 1)[0].replace("\n", " ").strip()
     for prefix in _LABEL_PREFIXES:
         if cleaned.startswith(prefix):
             cleaned = cleaned[len(prefix):].strip()
-
     expected = f"{user_name} 담당자님, "
     if cleaned.startswith(expected):
         return cleaned
-    # 잘못된 호칭 prefix 가 붙어있으면 제거 후 올바른 호칭 prepend
     for bad in _BAD_HONORIFICS:
         if cleaned.startswith(bad):
             cleaned = cleaned[len(bad):].strip()
